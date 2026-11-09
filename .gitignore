@@ -1,0 +1,16 @@
+# Gradle / Kotlin
+.gradle/
+.kotlin/
+build/
+
+# Android
+/local.properties
+captures/
+.cxx/
+
+# IDE
+.idea/
+*.iml
+
+# Claude Code
+.claude/settings.local.json

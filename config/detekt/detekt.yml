@@ -1,0 +1,15 @@
+# 在 detekt 默认配置之上的调整（buildUponDefaultConfig = true）。
+
+naming:
+  FunctionNaming:
+    # Compose 约定：发射 UI 的 @Composable 函数使用 PascalCase。
+    ignoreAnnotated:
+      - Composable
+
+style:
+  MaxLineLength:
+    # 行宽属于格式，由 ktlint（ktlint_official，140 列）统一负责。
+    active: false
+  ReturnCount:
+    # `?: return` 等卫语句是 Kotlin 惯用写法，不计入返回次数。
+    excludeGuardClauses: true

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 界面全部由 Compose 绘制；窗口主题只决定启动瞬间的背景与系统栏外观。 -->
+    <style name="Theme.APInspector" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

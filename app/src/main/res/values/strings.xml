@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">APInspector</string>
+
+    <string name="home_empty_title">还没有 API 文档</string>
+    <string name="home_empty_body">导入 OpenAPI 3.0 / 3.1 文档后，它会出现在这里</string>
+
+    <string name="home_no_spec_selected_title">未选择 API 文档</string>
+    <string name="home_no_spec_selected_body">从左侧选择一个 API 文档，浏览其中的接口</string>
+</resources>
