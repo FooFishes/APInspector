@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.dp
 fun EmptyState(
     icon: Painter,
     title: String,
-    body: String,
+    body: String?,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -60,12 +60,14 @@ fun EmptyState(
             style = MaterialTheme.typography.titleLargeEmphasized,
             textAlign = TextAlign.Center,
         )
-        Text(
-            text = body,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
+        body?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }
 

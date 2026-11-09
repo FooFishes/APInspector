@@ -1,5 +1,10 @@
 # 在 detekt 默认配置之上的调整（buildUponDefaultConfig = true）。
 
+complexity:
+  TooManyFunctions:
+    # 把界面拆成许多小的 private Composable 是推荐写法，只统计对外暴露的函数。
+    ignorePrivate: true
+
 naming:
   FunctionNaming:
     # Compose 约定：发射 UI 的 @Composable 函数使用 PascalCase。
@@ -13,3 +18,8 @@ style:
   ReturnCount:
     # `?: return` 等卫语句是 Kotlin 惯用写法，不计入返回次数。
     excludeGuardClauses: true
+  MagicNumber:
+    # Preview 中的示例数据不是魔法数字。
+    ignoreAnnotated:
+      - Preview
+      - PreviewLightDark
