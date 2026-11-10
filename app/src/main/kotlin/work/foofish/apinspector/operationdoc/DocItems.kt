@@ -62,6 +62,8 @@ sealed interface DocItem {
         val name: String,
         val required: Boolean,
         val deprecated: Boolean,
+        /** 名为 Accept / Content-Type / Authorization 的 Header：按规范默认忽略（PRD 4.1）。 */
+        val ignored: Boolean,
         val type: TypeLabel?,
         val description: String?,
         val facts: ImmutableList<SchemaFact>,

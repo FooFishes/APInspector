@@ -121,6 +121,3 @@ internal val SCHEMA_TYPES: Map<String, SchemaType> =
         "object" to SchemaType.OBJECT,
         "null" to SchemaType.NULL,
     )
-
-/** 规范规定：这些名称的 Header 参数定义应被忽略，由 content type 与鉴权方案决定（大小写不敏感）。 */
-internal val IGNORED_HEADER_PARAMETERS: Set<String> = setOf("accept", "content-type", "authorization")

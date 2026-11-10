@@ -23,6 +23,7 @@ import work.foofish.apinspector.ui.theme.codeSmall
 @Composable
 fun ConfirmRemovalDialog(
     removed: ImmutableList<OperationKey>,
+    withPresets: Int,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
@@ -38,6 +39,7 @@ fun ConfirmRemovalDialog(
                 removed.take(MAX_LISTED).forEach { Text(it.toString(), style = MaterialTheme.typography.codeSmall) }
                 val hidden = removed.size - MAX_LISTED
                 if (hidden > 0) Text(pluralStringResource(R.plurals.refresh_confirm_more, hidden, hidden))
+                if (withPresets > 0) Text(pluralStringResource(R.plurals.refresh_confirm_presets, withPresets, withPresets))
             }
         },
         confirmButton = { TextButton(onClick = onConfirm) { Text(stringResource(R.string.refresh_confirm)) } },
@@ -50,6 +52,7 @@ fun ConfirmRemovalDialog(
 fun RefreshSummaryDialog(
     diff: OperationDiff,
     warningCount: Int,
+    serversChanged: Boolean,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -68,6 +71,7 @@ fun RefreshSummaryDialog(
                     },
                 )
                 if (warningCount > 0) Text(pluralStringResource(R.plurals.refresh_warnings, warningCount, warningCount))
+                if (serversChanged) Text(stringResource(R.string.refresh_servers_changed))
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_ok)) } },

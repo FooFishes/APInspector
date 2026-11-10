@@ -1,5 +1,7 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
+    // 当前参数、预设、实际请求等需要持久化的领域模型直接标注 @Serializable。
+    alias(libs.plugins.kotlin.serialization)
 }
 
 kotlin {

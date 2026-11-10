@@ -16,6 +16,7 @@ import work.foofish.apinspector.openapi.Resolvable
 import work.foofish.apinspector.openapi.Response
 import work.foofish.apinspector.openapi.Schema
 import work.foofish.apinspector.openapi.SchemaType
+import work.foofish.apinspector.openapi.request.isIgnoredHeader
 
 /** 许多文档的 description 只是重复 summary，此时不再重复显示。 */
 fun Operation.overview(): OperationOverview =
@@ -94,6 +95,7 @@ private class OperationDocBuilder(
                 name = parameter.name,
                 required = parameter.required,
                 deprecated = parameter.deprecated,
+                ignored = parameter.isIgnoredHeader,
                 type = schema?.let(::typeLabel),
                 description = parameter.description ?: (schema as? Schema.Reference)?.description ?: target?.description,
                 facts = facts(target, parameter.example).toImmutableList(),
@@ -318,13 +320,6 @@ private class OperationDocBuilder(
         }
     }
 
-    private fun typeLabel(schema: Schema): TypeLabel =
-        when (schema) {
-            is Schema.Reference -> TypeLabel(schema.name, TypeLabel.Kind.REFERENCE)
-            is Schema.Unresolved -> TypeLabel(schema.ref, TypeLabel.Kind.UNRESOLVED)
-            is Schema.Definition -> TypeLabel(typeText(schema), TypeLabel.Kind.PLAIN)
-        }
-
     private fun facts(
         definition: Schema.Definition?,
         example: JsonElement?,
@@ -364,6 +359,14 @@ private class OperationDocBuilder(
             )
     }
 }
+
+/** Schema 的类型标签：引用显示引用名，未解析的引用显示原始引用。 */
+fun typeLabel(schema: Schema): TypeLabel =
+    when (schema) {
+        is Schema.Reference -> TypeLabel(schema.name, TypeLabel.Kind.REFERENCE)
+        is Schema.Unresolved -> TypeLabel(schema.ref, TypeLabel.Kind.UNRESOLVED)
+        is Schema.Definition -> TypeLabel(typeText(schema), TypeLabel.Kind.PLAIN)
+    }
 
 /** 类型简写；数组元素为引用时只显示引用名，不展开，因此不会递归。 */
 private fun typeText(definition: Schema.Definition): String {

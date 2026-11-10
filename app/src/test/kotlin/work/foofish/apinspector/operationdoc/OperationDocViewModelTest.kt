@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
-import work.foofish.apinspector.navigation.OperationDocKey
+import work.foofish.apinspector.navigation.OperationPageKey
 import work.foofish.apinspector.openapi.HttpMethod
 import work.foofish.apinspector.openapi.OperationKey
 import work.foofish.apinspector.spec.SpecId
@@ -24,7 +24,7 @@ class OperationDocViewModelTest {
     private val repository = FakeSpecRepository()
     private val pets = OperationKey(HttpMethod.GET, "/pets")
 
-    private fun viewModel(operation: OperationKey = pets) = OperationDocViewModel(OperationDocKey(SpecId("a"), operation), repository)
+    private fun viewModel(operation: OperationKey = pets) = OperationDocViewModel(OperationPageKey(SpecId("a"), operation), repository)
 
     init {
         repository.put(

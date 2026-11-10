@@ -52,71 +52,42 @@ import work.foofish.apinspector.ui.text.message
 import work.foofish.apinspector.ui.theme.codeMedium
 import work.foofish.apinspector.ui.theme.codeSmall
 
-/**
- * 接口文档（PRD 3）。
- *
- * @param showBack 单栏布局下显示返回按钮；双栏布局下文档位于详情栏，不需要返回。
- */
+/** "文档" Tab（PRD 3）。 */
 @Composable
-fun OperationDocScreen(
+fun OperationDocTab(
     viewModel: OperationDocViewModel,
-    showBack: Boolean,
-    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    Scaffold(
-        modifier = modifier,
-        topBar = {
-            TopAppBar(
-                title = {
-                    val key = (state as? OperationDocUiState.Loaded)?.overview?.key
-                    if (key !=
-                        null
-                    ) {
-                        Text(key.path, style = MaterialTheme.typography.codeMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                },
-                navigationIcon = {
-                    if (showBack) {
-                        IconButton(onClick = onBack) {
-                            Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.action_back))
-                        }
-                    }
-                },
-            )
-        },
-    ) { innerPadding ->
-        when (val current = state) {
-            OperationDocUiState.Loading -> {
-                LoadingState(Modifier.padding(innerPadding))
-            }
+    when (val current = state) {
+        OperationDocUiState.Loading -> {
+            LoadingState(modifier)
+        }
 
-            OperationDocUiState.Missing -> {
-                Centered(Modifier.padding(innerPadding)) {
-                    EmptyState(painterResource(R.drawable.ic_error), stringResource(R.string.operations_spec_missing), body = null)
-                }
+        OperationDocUiState.Missing -> {
+            Centered(modifier) {
+                EmptyState(painterResource(R.drawable.ic_error), stringResource(R.string.operations_spec_missing), body = null)
             }
+        }
 
-            is OperationDocUiState.Failed -> {
-                Centered(Modifier.padding(innerPadding)) {
-                    EmptyState(
-                        painterResource(R.drawable.ic_error),
-                        stringResource(R.string.operations_load_failed_title),
-                        current.failure.message(),
-                    )
-                }
-            }
-
-            is OperationDocUiState.Loaded -> {
-                DocList(
-                    overview = current.overview,
-                    items = current.items,
-                    onToggle = viewModel::toggle,
-                    onSelectContentType = viewModel::selectContentType,
-                    contentPadding = innerPadding,
+        is OperationDocUiState.Failed -> {
+            Centered(modifier) {
+                EmptyState(
+                    painterResource(R.drawable.ic_error),
+                    stringResource(R.string.operations_load_failed_title),
+                    current.failure.message(),
                 )
             }
+        }
+
+        is OperationDocUiState.Loaded -> {
+            DocList(
+                overview = current.overview,
+                items = current.items,
+                onToggle = viewModel::toggle,
+                onSelectContentType = viewModel::selectContentType,
+                modifier = modifier,
+            )
         }
     }
 }
@@ -127,12 +98,11 @@ private fun DocList(
     items: ImmutableList<DocItem>,
     onToggle: (String) -> Unit,
     onSelectContentType: (String, String) -> Unit,
-    contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = contentPadding.calculateTopPadding(), bottom = ScreenPadding),
+        contentPadding = PaddingValues(top = ScreenPadding, bottom = ScreenPadding),
     ) {
         item(key = OVERVIEW_KEY) { Overview(overview, Modifier.padding(horizontal = ScreenPadding)) }
         items(items, key = DocItem::id) { item ->
@@ -185,6 +155,7 @@ private fun ParameterRow(
 ) {
     TreeRow(depth = 0, expandable = item.expandable, expanded = item.expanded, onToggle = onToggle, modifier = modifier) {
         NameLine(name = item.name, type = item.type, required = item.required, deprecated = item.deprecated)
+        if (item.ignored) Muted(stringResource(R.string.doc_ignored_header))
         item.description?.let { Muted(it) }
         Facts(item.facts)
     }
@@ -615,16 +586,6 @@ private fun DocNote.label(): Int =
         DocNote.NO_RESPONSES -> R.string.doc_no_responses
         DocNote.BODY_REQUIRED -> R.string.doc_body_required
         DocNote.RESPONSE_HEADERS -> R.string.doc_response_headers
-    }
-
-@StringRes
-private fun ParameterLocation.label(): Int =
-    when (this) {
-        ParameterLocation.PATH -> R.string.doc_location_path
-        ParameterLocation.QUERY -> R.string.doc_location_query
-        ParameterLocation.QUERY_STRING -> R.string.doc_location_query_string
-        ParameterLocation.HEADER -> R.string.doc_location_header
-        ParameterLocation.COOKIE -> R.string.doc_location_cookie
     }
 
 private const val OVERVIEW_KEY = "overview"

@@ -43,9 +43,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
 import work.foofish.apinspector.R
+import work.foofish.apinspector.environment.EnvironmentId
 import work.foofish.apinspector.openapi.OperationKey
 import work.foofish.apinspector.openapi.ParseWarning
+import work.foofish.apinspector.request.ui.EnvironmentSelector
 import work.foofish.apinspector.spec.SpecSummary
+import work.foofish.apinspector.ui.component.BackButton
 import work.foofish.apinspector.ui.component.EmptyState
 import work.foofish.apinspector.ui.component.FailureDialog
 import work.foofish.apinspector.ui.component.LoadingState
@@ -68,6 +71,8 @@ fun OperationListScreen(
     viewModel: OperationListViewModel,
     selected: OperationKey?,
     onOpenOperation: (OperationKey) -> Unit,
+    onOpenHistory: () -> Unit,
+    onManageEnvironments: () -> Unit,
     onBack: () -> Unit,
     onOpenDrawer: (() -> Unit)?,
     modifier: Modifier = Modifier,
@@ -80,18 +85,34 @@ fun OperationListScreen(
         onToggleSection = viewModel::toggleSection,
         onSetFavorite = viewModel::setFavorite,
         onOpenOperation = onOpenOperation,
-        onRefresh = viewModel::refresh,
-        onBack = onBack,
-        onOpenDrawer = onOpenDrawer,
+        bar =
+            OperationListBarActions(
+                onRefresh = viewModel::refresh,
+                onOpenHistory = onOpenHistory,
+                onSelectEnvironment = viewModel::selectEnvironment,
+                onManageEnvironments = onManageEnvironments,
+                onBack = onBack,
+                onOpenDrawer = onOpenDrawer,
+            ),
         modifier = modifier,
     )
     when (val refresh = state.refresh) {
         is RefreshStatus.ConfirmingRemoval -> {
-            ConfirmRemovalDialog(removed = refresh.removed, onConfirm = viewModel::confirmRefresh, onDismiss = viewModel::cancelRefresh)
+            ConfirmRemovalDialog(
+                removed = refresh.removed,
+                withPresets = refresh.withPresets,
+                onConfirm = viewModel::confirmRefresh,
+                onDismiss = viewModel::cancelRefresh,
+            )
         }
 
         is RefreshStatus.Done -> {
-            RefreshSummaryDialog(diff = refresh.diff, warningCount = refresh.warningCount, onDismiss = viewModel::onRefreshResultShown)
+            RefreshSummaryDialog(
+                diff = refresh.diff,
+                warningCount = refresh.warningCount,
+                serversChanged = refresh.serversChanged,
+                onDismiss = viewModel::onRefreshResultShown,
+            )
         }
 
         is RefreshStatus.Failed -> {
@@ -115,9 +136,7 @@ private fun OperationListContent(
     onToggleSection: (SectionId) -> Unit,
     onSetFavorite: (OperationKey, Boolean) -> Unit,
     onOpenOperation: (OperationKey) -> Unit,
-    onRefresh: () -> Unit,
-    onBack: () -> Unit,
-    onOpenDrawer: (() -> Unit)?,
+    bar: OperationListBarActions,
     modifier: Modifier = Modifier,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -129,9 +148,7 @@ private fun OperationListContent(
                 state = state,
                 scrollBehavior = scrollBehavior,
                 onShowWarnings = { warningsToShow = it },
-                onRefresh = onRefresh,
-                onBack = onBack,
-                onOpenDrawer = onOpenDrawer,
+                actions = bar,
             )
         },
     ) { innerPadding ->
@@ -178,11 +195,10 @@ private fun OperationListTopBar(
     state: OperationListUiState,
     scrollBehavior: TopAppBarScrollBehavior,
     onShowWarnings: (ImmutableList<ParseWarning>) -> Unit,
-    onRefresh: () -> Unit,
-    onBack: () -> Unit,
-    onOpenDrawer: (() -> Unit)?,
+    actions: OperationListBarActions,
     modifier: Modifier = Modifier,
 ) {
+    val onOpenDrawer = actions.onOpenDrawer
     Column(modifier = modifier) {
         MediumFlexibleTopAppBar(
             title = { Text(state.spec?.title.orEmpty(), maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -193,12 +209,13 @@ private fun OperationListTopBar(
                         Icon(painterResource(R.drawable.ic_menu), contentDescription = stringResource(R.string.operations_switch_spec))
                     }
                 } else {
-                    IconButton(onClick = onBack) {
-                        Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.action_back))
-                    }
+                    BackButton(onClick = actions.onBack)
                 }
             },
             actions = {
+                IconButton(onClick = actions.onOpenHistory) {
+                    Icon(painterResource(R.drawable.ic_history), contentDescription = stringResource(R.string.history_title))
+                }
                 val warnings = (state.content as? OperationListContent.Loaded)?.warnings
                 if (!warnings.isNullOrEmpty()) {
                     IconButton(onClick = { onShowWarnings(warnings) }) {
@@ -206,18 +223,38 @@ private fun OperationListTopBar(
                     }
                 }
                 if (state.canRefresh) {
-                    IconButton(onClick = onRefresh, enabled = state.refresh == RefreshStatus.Idle) {
+                    IconButton(onClick = actions.onRefresh, enabled = state.refresh == RefreshStatus.Idle) {
                         Icon(painterResource(R.drawable.ic_refresh), contentDescription = stringResource(R.string.action_refresh))
                     }
                 }
             },
             scrollBehavior = scrollBehavior,
         )
+        if (state.content is OperationListContent.Loaded) {
+            EnvironmentSelector(
+                environments = state.environments,
+                current = state.environment,
+                onSelect = actions.onSelectEnvironment,
+                onManage = actions.onManageEnvironments,
+                modifier = Modifier.padding(horizontal = ScreenPadding),
+            )
+        }
         if (state.refresh == RefreshStatus.Fetching || state.refresh == RefreshStatus.Applying) {
             LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
         }
     }
 }
+
+/** 顶栏上的操作。 */
+private class OperationListBarActions(
+    val onRefresh: () -> Unit,
+    val onOpenHistory: () -> Unit,
+    val onSelectEnvironment: (EnvironmentId) -> Unit,
+    val onManageEnvironments: () -> Unit,
+    val onBack: () -> Unit,
+    /** 非空时（Medium 及以上窗口）导航图标打开 API 文档侧边导航；否则为返回。 */
+    val onOpenDrawer: (() -> Unit)?,
+)
 
 @Composable
 private fun OperationList(

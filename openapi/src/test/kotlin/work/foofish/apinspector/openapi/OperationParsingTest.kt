@@ -2,6 +2,7 @@ package work.foofish.apinspector.openapi
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import work.foofish.apinspector.openapi.request.isIgnoredHeader
 
 class OperationParsingTest {
     @Test
@@ -80,7 +81,7 @@ class OperationParsingTest {
     }
 
     @Test
-    fun `ignores header parameters that the specification reserves`() {
+    fun `keeps header parameters that the specification reserves, marking them ignored`() {
         val document =
             parseSuccess(
                 spec(
@@ -97,7 +98,7 @@ class OperationParsingTest {
                 ),
             ).document
         val parameters = document.operation(HttpMethod.GET, "/items").parameters.map { it.resolved() }
-        assertEquals(listOf("Accept" to ParameterLocation.QUERY), parameters.map { it.name to it.location })
+        assertEquals(listOf(true, true, true, false), parameters.map { it.isIgnoredHeader })
     }
 
     @Test

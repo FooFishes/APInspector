@@ -4,6 +4,11 @@ complexity:
   TooManyFunctions:
     # 把界面拆成许多小的 private Composable 是推荐写法，只统计对外暴露的函数。
     ignorePrivate: true
+    # 实现接口的函数已在接口处计数。
+    ignoreOverridden: true
+    # Room DAO 是查询目录，每个查询一个函数。
+    ignoreAnnotated:
+      - Dao
 
 naming:
   FunctionNaming:
@@ -19,6 +24,8 @@ style:
     # `?: return` 等卫语句是 Kotlin 惯用写法，不计入返回次数。
     excludeGuardClauses: true
   MagicNumber:
+    # 枚举项本身就是数值的名字（如 `MB_10(10)`）。
+    ignoreEnums: true
     # Preview 中的示例数据不是魔法数字。
     ignoreAnnotated:
       - Preview

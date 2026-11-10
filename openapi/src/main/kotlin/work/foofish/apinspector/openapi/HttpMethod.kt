@@ -1,11 +1,21 @@
 package work.foofish.apinspector.openapi
 
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+
 /**
  * HTTP 方法。方法名区分大小写（RFC 9110 §9.1），按发出请求时的原样保存。
  *
  * 除标准方法外，OpenAPI 3.2 允许通过 `additionalOperations` 声明任意方法（如 `LINK`），因此这里不是枚举。
  */
 @JvmInline
+@Serializable(with = HttpMethodSerializer::class)
 public value class HttpMethod private constructor(
     public val name: String,
 ) {
@@ -41,5 +51,23 @@ public value class HttpMethod private constructor(
 
         /** 按方法名创建，原样保留大小写；不是合法的 HTTP token 时返回 `null`。 */
         public fun of(name: String): HttpMethod? = name.takeIf(TOKEN::matches)?.let(::HttpMethod)
+    }
+}
+
+/** 以方法名序列化；反序列化时校验是否为合法的 HTTP token。 */
+internal object HttpMethodSerializer : KSerializer<HttpMethod> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("work.foofish.apinspector.openapi.HttpMethod", PrimitiveKind.STRING)
+
+    override fun serialize(
+        encoder: Encoder,
+        value: HttpMethod,
+    ) {
+        encoder.encodeString(value.name)
+    }
+
+    override fun deserialize(decoder: Decoder): HttpMethod {
+        val name = decoder.decodeString()
+        return HttpMethod.of(name) ?: throw SerializationException("非法的 HTTP 方法：$name")
     }
 }

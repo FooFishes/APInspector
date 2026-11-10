@@ -85,6 +85,7 @@ import java.time.Instant
 @Composable
 fun HomeScreen(
     onOpenSpec: (SpecId) -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -97,6 +98,7 @@ fun HomeScreen(
         onOpenSpec = onOpenSpec,
         onPinChange = viewModel::setPinned,
         onDelete = viewModel::delete,
+        onOpenSettings = onOpenSettings,
         modifier = modifier,
     )
 }
@@ -113,6 +115,7 @@ private fun HomeContent(
     onOpenSpec: (SpecId) -> Unit,
     onPinChange: (SpecId, Boolean) -> Unit,
     onDelete: (SpecId) -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -131,7 +134,7 @@ private fun HomeContent(
 
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = { HomeTopBar(importing = state.importStatus == ImportStatus.Importing, scrollBehavior = scrollBehavior) },
+        topBar = { HomeTopBar(state.importStatus == ImportStatus.Importing, scrollBehavior, onOpenSettings) },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             ImportMenu(
@@ -162,9 +165,7 @@ private fun HomeContent(
             onDismiss = { prompt = null },
         )
     }
-    (state.importStatus as? ImportStatus.Finished)?.outcome?.let { it as? ImportOutcome.Failed }?.let { failed ->
-        FailureDialog(title = stringResource(R.string.import_failed_title), failure = failed.failure, onDismiss = onImportOutcomeConsume)
-    }
+    ImportFailureDialog(state.importStatus, onDismiss = onImportOutcomeConsume)
     pendingDeletion?.let { spec ->
         DeleteSpecDialog(
             spec = spec,
@@ -178,14 +179,33 @@ private fun HomeContent(
     warningsToShow?.let { WarningsSheet(warnings = it, onDismiss = { warningsToShow = null }) }
 }
 
+/** 导入失败时说明原因。 */
+@Composable
+private fun ImportFailureDialog(
+    status: ImportStatus,
+    onDismiss: () -> Unit,
+) {
+    val failed = (status as? ImportStatus.Finished)?.outcome as? ImportOutcome.Failed ?: return
+    FailureDialog(title = stringResource(R.string.import_failed_title), failure = failed.failure, onDismiss = onDismiss)
+}
+
 @Composable
 private fun HomeTopBar(
     importing: Boolean,
     scrollBehavior: TopAppBarScrollBehavior,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
-        LargeFlexibleTopAppBar(title = { Text(stringResource(R.string.app_name)) }, scrollBehavior = scrollBehavior)
+        LargeFlexibleTopAppBar(
+            title = { Text(stringResource(R.string.app_name)) },
+            actions = {
+                IconButton(onClick = onOpenSettings) {
+                    Icon(painterResource(R.drawable.ic_settings), contentDescription = stringResource(R.string.settings_title))
+                }
+            },
+            scrollBehavior = scrollBehavior,
+        )
         if (importing) LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
     }
 }
@@ -546,6 +566,7 @@ private fun HomeContentPreview() {
             onOpenSpec = {},
             onPinChange = { _, _ -> },
             onDelete = {},
+            onOpenSettings = {},
         )
     }
 }

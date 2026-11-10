@@ -7,18 +7,25 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import work.foofish.apinspector.environment.Environment
+import work.foofish.apinspector.environment.EnvironmentId
+import work.foofish.apinspector.environment.EnvironmentRepository
 import work.foofish.apinspector.navigation.SpecKey
 import work.foofish.apinspector.openapi.OperationDiff
 import work.foofish.apinspector.openapi.OperationKey
 import work.foofish.apinspector.openapi.ParseWarning
+import work.foofish.apinspector.request.EnvironmentOption
+import work.foofish.apinspector.request.toOption
 import work.foofish.apinspector.spec.DocumentLoad
 import work.foofish.apinspector.spec.FavoriteOperationRepository
 import work.foofish.apinspector.spec.ImportFailure
@@ -35,12 +42,23 @@ data class OperationListUiState(
     val query: String,
     val content: OperationListContent,
     val refresh: RefreshStatus,
+    /** 环境选择（PRD 5，顶栏标题下方）。 */
+    val environments: ImmutableList<EnvironmentOption>,
+    val environment: EnvironmentOption?,
 ) {
     /** 只有 URL 来源可以刷新（PRD 2）。 */
     val canRefresh: Boolean get() = spec?.origin is SpecOrigin.Url
 
     companion object {
-        val Initial = OperationListUiState(spec = null, query = "", content = OperationListContent.Loading, refresh = RefreshStatus.Idle)
+        val Initial =
+            OperationListUiState(
+                spec = null,
+                query = "",
+                content = OperationListContent.Loading,
+                refresh = RefreshStatus.Idle,
+                environments = persistentListOf(),
+                environment = null,
+            )
     }
 }
 
@@ -67,16 +85,19 @@ sealed interface RefreshStatus {
 
     data object Fetching : RefreshStatus
 
-    /** 新文档中有接口消失，等待用户确认后才删除它们的数据。 */
+    /** 新文档中有接口消失，等待用户确认后才删除它们的数据；其中 [withPresets] 个带有预设。 */
     data class ConfirmingRemoval(
         val removed: ImmutableList<OperationKey>,
+        val withPresets: Int,
     ) : RefreshStatus
 
     data object Applying : RefreshStatus
 
+    /** [serversChanged]：`servers` 有变化，环境不随之改变（PRD 5）。 */
     data class Done(
         val diff: OperationDiff,
         val warningCount: Int,
+        val serversChanged: Boolean,
     ) : RefreshStatus
 
     data class Failed(
@@ -91,6 +112,7 @@ class OperationListViewModel
         @Assisted key: SpecKey,
         private val specs: SpecRepository,
         private val favorites: FavoriteOperationRepository,
+        private val environments: EnvironmentRepository,
     ) : ViewModel() {
         @AssistedFactory
         interface Factory {
@@ -108,21 +130,32 @@ class OperationListViewModel
         private val listState = combine(query, collapsed) { query, collapsed -> query to collapsed }
 
         /** 刷新保存后更新时间变化，这里会自动重新加载。 */
-        private val load = specs.observeDocument(specId)
+        private val load =
+            specs.observeDocument(specId).onEach { load ->
+                if (load is DocumentLoad.Loaded) environments.ensureEnvironments(specId, load.content.document)
+            }
+
+        private val environmentState =
+            combine(environments.environments(specId), environments.current(specId)) { all, current ->
+                all.map(Environment::toOption).toImmutableList() to current?.toOption()
+            }
 
         val uiState: StateFlow<OperationListUiState> =
             combine(
                 specs.spec(specId),
                 load,
                 favorites.favorites(specId),
-                listState,
+                combine(listState, environmentState, ::Pair),
                 refresh,
-            ) { spec, load, favorites, (query, collapsed), refresh ->
+            ) { spec, load, favorites, (list, environments), refresh ->
+                val (query, collapsed) = list
                 OperationListUiState(
                     spec = spec,
                     query = query,
                     content = load.toContent(favorites, query, collapsed),
                     refresh = refresh,
+                    environments = environments.first,
+                    environment = environments.second,
                 )
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), OperationListUiState.Initial)
 
@@ -141,6 +174,10 @@ class OperationListViewModel
             viewModelScope.launch { favorites.setFavorite(specId, operation, favorite) }
         }
 
+        fun selectEnvironment(id: EnvironmentId) {
+            viewModelScope.launch { environments.select(specId, id) }
+        }
+
         fun refresh() {
             if (refresh.value != RefreshStatus.Idle) return
             refresh.value = RefreshStatus.Fetching
@@ -156,7 +193,8 @@ class OperationListViewModel
                             apply(preparation.preview)
                         } else {
                             pendingRefresh = preparation.preview
-                            refresh.value = RefreshStatus.ConfirmingRemoval(removed.toImmutableList())
+                            refresh.value =
+                                RefreshStatus.ConfirmingRemoval(removed.toImmutableList(), preparation.preview.removedWithPresets)
                         }
                     }
                 }
@@ -182,7 +220,7 @@ class OperationListViewModel
         private suspend fun apply(preview: RefreshPreview) {
             refresh.value = RefreshStatus.Applying
             specs.applyRefresh(preview)
-            refresh.value = RefreshStatus.Done(preview.diff, preview.content.warnings.size)
+            refresh.value = RefreshStatus.Done(preview.diff, preview.content.warnings.size, preview.serversChanged)
         }
 
         private companion object {

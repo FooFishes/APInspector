@@ -11,3 +11,8 @@ annotation class IoDispatcher
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class DefaultDispatcher
+
+/** 与应用进程同生命周期的协程作用域：离开页面也不应中断的工作（如发送请求，PRD 6）。 */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class ApplicationScope

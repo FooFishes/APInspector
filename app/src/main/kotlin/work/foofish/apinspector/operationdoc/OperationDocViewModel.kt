@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
-import work.foofish.apinspector.navigation.OperationDocKey
+import work.foofish.apinspector.navigation.OperationPageKey
 import work.foofish.apinspector.spec.DocumentLoad
 import work.foofish.apinspector.spec.ImportFailure
 import work.foofish.apinspector.spec.SpecRepository
@@ -39,12 +39,12 @@ sealed interface OperationDocUiState {
 class OperationDocViewModel
     @AssistedInject
     constructor(
-        @Assisted key: OperationDocKey,
+        @Assisted key: OperationPageKey,
         specs: SpecRepository,
     ) : ViewModel() {
         @AssistedFactory
         interface Factory {
-            fun create(key: OperationDocKey): OperationDocViewModel
+            fun create(key: OperationPageKey): OperationDocViewModel
         }
 
         private val operationKey = key.operation

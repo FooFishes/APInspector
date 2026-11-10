@@ -11,8 +11,8 @@ import work.foofish.apinspector.spec.SpecId
 class BackStackTest {
     private val a = SpecId("a")
     private val b = SpecId("b")
-    private val getPets = OperationDocKey(a, OperationKey(HttpMethod.GET, "/pets"))
-    private val postPets = OperationDocKey(a, OperationKey(HttpMethod.POST, "/pets"))
+    private val getPets = OperationPageKey(a, OperationKey(HttpMethod.GET, "/pets"))
+    private val postPets = OperationPageKey(a, OperationKey(HttpMethod.POST, "/pets"))
 
     @Test
     fun `opening a spec replaces whatever was open`() {
@@ -34,6 +34,6 @@ class BackStackTest {
 
     @Test
     fun `operation key round-trips the method`() {
-        assertEquals(OperationKey(HttpMethod.QUERY, "/search"), OperationDocKey(a, OperationKey(HttpMethod.QUERY, "/search")).operation)
+        assertEquals(OperationKey(HttpMethod.QUERY, "/search"), OperationPageKey(a, OperationKey(HttpMethod.QUERY, "/search")).operation)
     }
 }

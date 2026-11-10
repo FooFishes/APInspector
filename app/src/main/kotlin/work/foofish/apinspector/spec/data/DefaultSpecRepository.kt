@@ -8,11 +8,17 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import work.foofish.apinspector.core.coroutines.DefaultDispatcher
+import work.foofish.apinspector.environment.data.toEntity
+import work.foofish.apinspector.history.HistoryRepository
 import work.foofish.apinspector.openapi.HttpMethod
 import work.foofish.apinspector.openapi.OpenApiParseResult
 import work.foofish.apinspector.openapi.OpenApiParser
 import work.foofish.apinspector.openapi.OperationDiff
 import work.foofish.apinspector.openapi.OperationKey
+import work.foofish.apinspector.openapi.request.alignedTo
+import work.foofish.apinspector.openapi.request.environmentTemplates
+import work.foofish.apinspector.request.data.decodeInput
+import work.foofish.apinspector.request.data.encodeInput
 import work.foofish.apinspector.spec.DocumentLoad
 import work.foofish.apinspector.spec.FavoriteOperationRepository
 import work.foofish.apinspector.spec.ImportFailure
@@ -38,6 +44,7 @@ class DefaultSpecRepository
         private val dao: SpecDao,
         private val store: SpecContentStore,
         private val reader: SpecSourceReader,
+        private val history: HistoryRepository,
         @DefaultDispatcher private val parsing: CoroutineDispatcher,
         private val clock: Clock,
     ) : SpecRepository,
@@ -60,11 +67,12 @@ class DefaultSpecRepository
                     is Parsed.Succeeded -> parsed.content
                 }
             val id = SpecId(UUID.randomUUID().toString())
-            val entity = newEntity(id, content, read.origin, clock.millis())
+            val environments = content.document.environmentTemplates().mapIndexed { position, template -> template.toEntity(id, position) }
+            val entity = newEntity(id, content, read.origin, clock.millis()).copy(currentEnvironmentId = environments.firstOrNull()?.id)
             store.write(id, read.text)
             var inserted = false
             try {
-                dao.insert(entity)
+                dao.insertImported(entity, environments)
                 inserted = true
             } finally {
                 // 元数据写入失败（含取消）时不留下孤立的原文文件。
@@ -109,7 +117,22 @@ class DefaultSpecRepository
             val diff =
                 current?.let { OperationDiff.between(it, content.document) }
                     ?: OperationDiff(added = content.document.operations.map { it.key }, removed = emptyList(), modified = emptyList())
-            return RefreshPreparation.Ready(RefreshPreview(id, diff, read.text, content))
+            val withPresets =
+                dao.allPresets(id.value).mapNotNullTo(HashSet()) { preset ->
+                    HttpMethod.of(preset.method)?.let {
+                        OperationKey(it, preset.path)
+                    }
+                }
+            return RefreshPreparation.Ready(
+                RefreshPreview(
+                    specId = id,
+                    diff = diff,
+                    removedWithPresets = diff.removed.count { it in withPresets },
+                    serversChanged = current != null && current.servers != content.document.servers,
+                    source = read.text,
+                    content = content,
+                ),
+            )
         }
 
         override suspend fun applyRefresh(preview: RefreshPreview) {
@@ -122,8 +145,30 @@ class DefaultSpecRepository
                     operationCount = document.operations.size,
                     updatedAt = clock.millis(),
                 )
+            val storedWorking = dao.allWorking(preview.specId.value)
+            val storedPresets = dao.allPresets(preview.specId.value)
+            val (working, presets) =
+                withContext(parsing) {
+                    val operations = document.operations.associateBy { it.key }
+
+                    // 已消失的接口返回 null：它们的数据随刷新删除。
+                    fun align(
+                        method: String,
+                        path: String,
+                        input: String,
+                    ): String? {
+                        val operation = HttpMethod.of(method)?.let { operations[OperationKey(it, path)] } ?: return null
+                        return encodeInput(decodeInput(input).alignedTo(operation, document))
+                    }
+                    storedWorking.mapNotNull { stored ->
+                        align(stored.method, stored.path, stored.input)?.let { stored.copy(input = it) }
+                    } to
+                        storedPresets.mapNotNull { stored ->
+                            align(stored.method, stored.path, stored.input)?.let { stored.copy(input = it) }
+                        }
+                }
             store.write(preview.specId, preview.source)
-            dao.applyRefresh(updated, preview.diff.removed.map { it.toFavoriteEntity(preview.specId) })
+            dao.applyRefresh(updated, preview.diff.removed.map { it.toFavoriteEntity(preview.specId) }, working, presets)
             cache.put(preview.specId, updated.updatedAt, preview.content)
         }
 
@@ -135,6 +180,8 @@ class DefaultSpecRepository
         }
 
         override suspend fun delete(id: SpecId) {
+            // 记录随外键级联删除，但缓存目录中的 Body 文件需要另行删除。
+            history.clear(id)
             dao.delete(id.value)
             store.delete(id)
             cache.remove(id)

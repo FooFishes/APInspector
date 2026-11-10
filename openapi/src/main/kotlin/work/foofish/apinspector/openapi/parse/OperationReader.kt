@@ -71,7 +71,7 @@ internal class OperationReader(
             description = node.string(Field.DESCRIPTION),
             tags = node.strings(Field.TAGS),
             deprecated = node.boolean(Field.DEPRECATED) == true,
-            parameters = merge(sharedParameters, parameters.parameters(node)).filterNot(::isIgnoredHeader),
+            parameters = merge(sharedParameters, parameters.parameters(node)),
             requestBody = node.obj(Field.REQUEST_BODY)?.let(content::requestBody),
             responses = resolveAll(node.children(Field.RESPONSES, allowsExtensions = true), content::response),
             security = security.requirements(node) ?: globalSecurity,
@@ -88,11 +88,6 @@ internal class OperationReader(
 
     private fun Resolvable<Parameter>.identity(): Pair<String, ParameterLocation>? =
         (this as? Resolvable.Resolved)?.value?.let { it.name to it.location }
-
-    private fun isIgnoredHeader(parameter: Resolvable<Parameter>): Boolean {
-        val value = (parameter as? Resolvable.Resolved)?.value ?: return false
-        return value.location == ParameterLocation.HEADER && value.name.lowercase(Locale.ROOT) in IGNORED_HEADER_PARAMETERS
-    }
 
     private companion object {
         const val PATH_PREFIX = "/"

@@ -27,7 +27,7 @@
     <string name="home_unpin">取消置顶</string>
     <string name="home_pinned">已置顶</string>
     <string name="home_delete_title">删除「%1$s」？</string>
-    <string name="home_delete_body">这份 API 文档及其收藏的接口将被永久删除。</string>
+    <string name="home_delete_body">这份 API 文档及其环境、预设与请求记录将被永久删除。</string>
 
     <!-- API 文档信息 -->
     <string name="spec_version">v%1$s</string>
@@ -120,7 +120,7 @@
     <plurals name="refresh_confirm_title">
         <item quantity="other">%1$d 个接口将被删除</item>
     </plurals>
-    <string name="refresh_confirm_body">以下接口在新文档中已不存在，刷新后它们的收藏将一并删除：</string>
+    <string name="refresh_confirm_body">以下接口在新文档中已不存在，刷新后它们的收藏、当前参数与预设将一并删除：</string>
     <plurals name="refresh_confirm_more">
         <item quantity="other">…以及另外 %1$d 个</item>
     </plurals>
@@ -176,4 +176,220 @@
     <string name="doc_fact_unique_items">元素不重复</string>
     <string name="doc_fact_pattern">格式：%1$s</string>
     <string name="doc_fact_example">示例：%1$s</string>
+    <string name="action_add">添加</string>
+    <string name="action_save">保存</string>
+    <string name="doc_ignored_header">按规范默认忽略</string>
+    <string name="refresh_servers_changed">文档的 servers 有变化；环境保持不变，可在「管理环境」中自行调整。</string>
+    <plurals name="refresh_confirm_presets">
+        <item quantity="other">其中 %1$d 个接口带有预设，将一并删除。</item>
+    </plurals>
+    <string name="json_type_null">null</string>
+    <string name="json_type_variable">变量</string>
+
+    <!-- 接口详情 -->
+    <string name="operation_tab_doc">文档</string>
+    <string name="operation_tab_request">请求</string>
+    <string name="operation_tab_response">响应</string>
+
+    <!-- 请求 -->
+    <string name="request_send">发送</string>
+    <string name="request_extras">额外参数</string>
+    <string name="request_add_header">添加 Header</string>
+    <string name="request_add_query">添加 Query</string>
+    <string name="request_add_item">添加元素</string>
+    <string name="request_add_field">添加字段</string>
+    <string name="request_field_name">字段名</string>
+    <string name="request_name">名称</string>
+    <string name="request_value">值</string>
+    <string name="request_ignored_header">按规范默认忽略</string>
+    <string name="request_no_body">无 Body</string>
+    <string name="request_mode_visual">可视化</string>
+    <string name="request_mode_raw">原文</string>
+    <string name="request_json_format">格式化</string>
+    <string name="request_json_error">第 %1$d 行第 %2$d 列：%3$s</string>
+    <string name="request_json_root">根</string>
+    <string name="request_json_members">%1$d 个字段</string>
+    <string name="request_json_items">%1$d 个元素</string>
+    <string name="request_json_variant">选择变体</string>
+    <string name="request_part_text">文本</string>
+    <string name="request_part_file">文件</string>
+    <string name="request_choose_file">选择文件</string>
+    <string name="request_blocked_title">无法发送</string>
+    <string name="request_edit_environment">去编辑环境</string>
+    <string name="request_problem_no_environment">这份 API 文档还没有环境，请先新建一个</string>
+    <string name="request_problem_missing_variables">以下变量未定义或为空：%1$s</string>
+    <string name="request_problem_incomplete_base_url">baseUrl 不完整（%1$s），需以 http:// 或 https:// 开头</string>
+    <string name="request_problem_body_file">尚未选择作为 Body 的文件</string>
+    <string name="request_problem_part_file">字段「%1$s」尚未选择文件</string>
+    <string name="request_problem_file_unavailable">文件「%1$s」不可用，请重新选择</string>
+
+    <!-- JSON 语法错误 -->
+    <string name="json_error_empty">内容为空</string>
+    <string name="json_error_unexpected_character">此处不应出现该字符</string>
+    <string name="json_error_unexpected_end">内容意外结束</string>
+    <string name="json_error_unterminated_string">字符串没有结束引号</string>
+    <string name="json_error_invalid_escape">无效的转义序列</string>
+    <string name="json_error_control_character">字符串中有未转义的控制字符</string>
+    <string name="json_error_invalid_number">无效的数字</string>
+    <string name="json_error_trailing_content">值结束后还有多余的内容</string>
+    <string name="json_error_too_deep">嵌套层级过深</string>
+
+    <!-- 预设 -->
+    <string name="preset_none">未使用预设</string>
+    <string name="preset_modified">%1$s · 已修改</string>
+    <string name="preset_name">预设名称</string>
+    <string name="preset_name_taken">已有同名的预设</string>
+    <string name="preset_save">保存到预设</string>
+    <string name="preset_save_title">用当前参数覆盖「%1$s」？</string>
+    <string name="preset_save_as">另存为新预设</string>
+    <string name="preset_rename">重命名预设</string>
+    <string name="preset_delete">删除预设</string>
+    <string name="preset_delete_title">删除预设「%1$s」？</string>
+    <string name="preset_load">加载</string>
+    <string name="preset_load_title">加载预设？</string>
+    <string name="preset_load_body">当前参数有未保存到预设的改动，加载后将被覆盖。</string>
+    <string name="preset_reset">重置为文档默认值</string>
+    <string name="preset_reset_title">重置为文档默认值？</string>
+    <string name="preset_reset_body">当前参数将被文档中的示例与默认值覆盖。</string>
+    <string name="preset_reset_confirm">重置</string>
+
+    <!-- 环境 -->
+    <string name="environment_none">无环境</string>
+    <string name="environment_manage">管理环境</string>
+    <string name="environment_new">新建环境</string>
+    <string name="environment_name">环境名称</string>
+    <string name="environment_rename">重命名</string>
+    <string name="environment_duplicate">复制</string>
+    <string name="environment_copy_name">%1$s 副本</string>
+    <string name="environment_use">设为当前环境</string>
+    <string name="environment_current">当前环境</string>
+    <string name="environment_delete_title">删除环境「%1$s」？</string>
+    <string name="environment_delete_body">环境中的变量、凭证与 Cookie 将被永久删除。</string>
+    <string name="environment_incomplete">baseUrl 不完整</string>
+    <string name="environment_incomplete_hint">baseUrl 不完整：替换变量后需以 http:// 或 https:// 开头，补全前不能发送</string>
+    <string name="environment_insecure">已跳过证书校验</string>
+    <string name="environment_missing">这个环境已被删除</string>
+    <string name="environment_no_selection">从左侧选择一个环境进行编辑</string>
+    <string name="environment_basic">基本</string>
+    <string name="environment_base_url">baseUrl</string>
+    <string name="environment_variables">变量</string>
+    <string name="environment_add_variable">添加变量</string>
+    <string name="environment_auth">鉴权</string>
+    <string name="environment_auth_none">文档没有声明鉴权方案</string>
+    <string name="environment_auth_unsupported">不支持自动注入这种鉴权方案</string>
+    <string name="environment_network">网络</string>
+    <string name="environment_skip_tls">跳过证书校验</string>
+    <string name="environment_skip_tls_hint">信任任何证书与主机名，仅用于调试自签名证书的服务</string>
+    <string name="environment_timeout_follow">超时跟随全局设置</string>
+    <string name="environment_cookies">Cookie（%1$d）</string>
+    <string name="auth_type_api_key">API Key</string>
+    <string name="auth_token">Token</string>
+    <string name="auth_username">用户名</string>
+    <string name="auth_password">密码</string>
+    <string name="auth_api_key_value">值</string>
+    <string name="auth_api_key_name">名称</string>
+    <string name="cookie_clear">清空</string>
+    <string name="cookie_clear_title">清空这个环境的全部 Cookie？</string>
+    <string name="cookie_expires">路径 %1$s · %2$s 过期</string>
+    <string name="cookie_session">路径 %1$s · 会话 Cookie</string>
+
+    <!-- 代理 -->
+    <string name="proxy_direct">直连</string>
+    <string name="proxy_follow_global">跟随全局</string>
+    <string name="proxy_custom">自定义</string>
+    <string name="proxy_http">HTTP</string>
+    <string name="proxy_socks5">SOCKS5</string>
+    <string name="proxy_host">主机</string>
+    <string name="proxy_port">端口</string>
+    <string name="proxy_username">用户名（可选）</string>
+    <string name="proxy_password">密码（可选）</string>
+
+    <!-- 响应 -->
+    <string name="response_sending">请求进行中…</string>
+    <string name="response_empty_title">还没有发送过请求</string>
+    <string name="response_empty_body">在「请求」中填写参数后发送，响应会显示在这里</string>
+    <string name="response_replay">重放</string>
+    <string name="response_restore">恢复到当前参数</string>
+    <string name="response_all_records">该接口的全部记录</string>
+    <string name="detail_overview">概览</string>
+    <string name="detail_body">Body</string>
+    <string name="detail_headers">响应头</string>
+    <string name="detail_request">请求</string>
+    <string name="detail_export">导出</string>
+    <string name="detail_status">状态</string>
+    <string name="detail_protocol">协议</string>
+    <string name="detail_sent_at">发送时间</string>
+    <string name="detail_source">来源</string>
+    <string name="detail_environment">环境</string>
+    <string name="detail_total_time">总耗时</string>
+    <string name="detail_dns">DNS</string>
+    <string name="detail_connect">连接</string>
+    <string name="detail_tls">TLS</string>
+    <string name="detail_first_byte">首字节</string>
+    <string name="detail_size">大小</string>
+    <string name="detail_final_url">最终 URL</string>
+    <string name="detail_error">错误</string>
+    <string name="detail_no_headers">没有响应头</string>
+    <string name="detail_no_body">没有 Body</string>
+    <string name="detail_body_cleared">Body 已清理</string>
+    <string name="detail_truncated">已截断：仅保存前 %1$s，完整大小 %2$s</string>
+    <string name="detail_display_limited">内容较大，仅显示开头部分；完整内容可另存为文件</string>
+    <string name="detail_search">搜索</string>
+    <string name="detail_tree">折叠树</string>
+    <string name="detail_raw">原文</string>
+    <string name="detail_copy_value">复制值</string>
+    <string name="detail_copy_path">复制路径</string>
+    <string name="detail_copy_curl">复制为 cURL</string>
+    <string name="detail_save_body">另存为文件</string>
+    <string name="detail_save_failed">另存失败</string>
+    <string name="detail_binary">二进制内容（%1$s）</string>
+    <string name="detail_unknown_type">未知类型</string>
+    <string name="detail_cannot_save_truncated">内容已截断，不能另存</string>
+    <string name="detail_image_unreadable">无法显示这张图片</string>
+    <string name="detail_request_file">文件 %1$s</string>
+
+    <!-- 请求记录 -->
+    <string name="history_title">请求记录</string>
+    <string name="history_empty">还没有请求记录</string>
+    <string name="history_show_all">显示全部接口</string>
+    <string name="history_clear">清空</string>
+    <string name="history_clear_title">清空请求记录？</string>
+    <string name="history_clear_body">这份 API 文档的全部请求记录及其响应 Body 将被删除。</string>
+    <string name="history_failed">失败</string>
+    <string name="history_cancelled">已取消</string>
+    <string name="history_entry_missing">这条记录已被删除</string>
+    <string name="history_no_entry_selected">从左侧选择一条请求记录</string>
+    <string name="history_restored">已恢复到当前参数</string>
+    <string name="history_source_operation">接口</string>
+    <string name="history_source_preset">预设</string>
+    <string name="history_source_preset_named">预设「%1$s」</string>
+    <string name="history_source_replay">重放</string>
+
+    <!-- 网络错误 -->
+    <string name="network_error_timeout">请求超时</string>
+    <string name="network_error_unknown_host">无法解析主机名</string>
+    <string name="network_error_connection">无法连接到服务器</string>
+    <string name="network_error_tls">TLS 握手失败</string>
+    <string name="network_error_file">请求引用的文件不可用</string>
+    <string name="network_error_other">请求失败</string>
+    <string name="network_error_with_detail">%1$s：%2$s</string>
+
+    <!-- 设置 -->
+    <string name="settings_title">设置</string>
+    <string name="settings_network">网络</string>
+    <string name="settings_timeout_seconds">超时（秒）</string>
+    <string name="settings_timeout_hint">连接、读取与写入各自的超时；环境可以覆盖</string>
+    <string name="settings_follow_redirects">自动跟随重定向</string>
+    <string name="settings_follow_redirects_hint">关闭后可以看到原始的 3xx 响应</string>
+    <string name="settings_proxy">代理</string>
+    <string name="settings_storage">存储</string>
+    <string name="settings_body_limit">响应 Body 保存上限</string>
+    <string name="settings_body_limit_hint">超出部分不保存，但仍计入大小与耗时</string>
+    <string name="settings_megabytes">%1$d MB</string>
+    <string name="settings_cache">响应缓存</string>
+    <string name="settings_cache_used">已用 %1$s</string>
+    <string name="settings_cache_measuring">正在计算…</string>
+    <string name="settings_clear_cache">清理</string>
+    <string name="settings_clear_cache_title">清理响应缓存？</string>
+    <string name="settings_clear_cache_body">所有请求记录的响应 Body 将被删除，记录本身保留。</string>
 </resources>

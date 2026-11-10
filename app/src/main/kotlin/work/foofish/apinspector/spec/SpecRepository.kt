@@ -24,7 +24,7 @@ interface SpecRepository {
     /** 拉取 URL 来源的最新内容并与当前内容比较，尚不保存。 */
     suspend fun prepareRefresh(id: SpecId): RefreshPreparation
 
-    /** 保存 [preview] 中的新内容，并删除已消失接口的数据。 */
+    /** 保存 [preview] 中的新内容，删除已消失接口的数据，并把当前参数与预设与新文档对齐。 */
     suspend fun applyRefresh(preview: RefreshPreview)
 
     suspend fun setPinned(
@@ -136,6 +136,10 @@ sealed interface RefreshPreparation {
 class RefreshPreview(
     val specId: SpecId,
     val diff: OperationDiff,
+    /** 已删除的接口中带有预设的个数，确认删除时提示（PRD 2）。 */
+    val removedWithPresets: Int,
+    /** 新旧文档的 `servers` 不同；环境不随之改变，只在变更摘要中提示（PRD 5）。 */
+    val serversChanged: Boolean,
     /** 新文档的原文，应用刷新时原样保存。 */
     val source: String,
     val content: LoadedDocument,

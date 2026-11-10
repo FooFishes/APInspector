@@ -19,6 +19,7 @@ import work.foofish.apinspector.spec.RefreshPreparation
 import work.foofish.apinspector.spec.RefreshPreview
 import work.foofish.apinspector.spec.SpecId
 import work.foofish.apinspector.spec.SpecOrigin
+import work.foofish.apinspector.testing.FakeEnvironmentRepository
 import work.foofish.apinspector.testing.FakeSpecRepository
 import work.foofish.apinspector.testing.MainDispatcherExtension
 import work.foofish.apinspector.testing.loaded
@@ -45,12 +46,16 @@ class OperationListViewModelTest {
     private val pets = OperationKey(HttpMethod.GET, "/pets")
     private val legacy = OperationKey(HttpMethod.GET, "/legacy")
 
-    private fun viewModel() = OperationListViewModel(SpecKey(id), repository, repository)
+    private val environments = FakeEnvironmentRepository()
+
+    private fun viewModel() = OperationListViewModel(SpecKey(id), repository, repository, environments)
 
     private fun preview(diff: OperationDiff) =
         RefreshPreview(
             specId = id,
             diff = diff,
+            removedWithPresets = 0,
+            serversChanged = false,
             source = "",
             content =
                 loaded(
@@ -148,7 +153,7 @@ class OperationListViewModelTest {
                 val diff = OperationDiff(added = emptyList(), removed = emptyList(), modified = listOf(pets))
                 repository.refreshResult.complete(RefreshPreparation.Ready(preview(diff)))
                 val done = expectMostRecentItem()
-                assertEquals(RefreshStatus.Done(diff, warningCount = 0), done.refresh)
+                assertEquals(RefreshStatus.Done(diff, warningCount = 0, serversChanged = false), done.refresh)
                 assertEquals(1, repository.appliedRefreshes.size)
                 assertEquals(1, (done.content as OperationListContent.Loaded).sections.size)
 
@@ -166,11 +171,11 @@ class OperationListViewModelTest {
                 viewModel.refresh()
                 val diff = OperationDiff(added = emptyList(), removed = listOf(legacy), modified = emptyList())
                 repository.refreshResult.complete(RefreshPreparation.Ready(preview(diff)))
-                assertEquals(RefreshStatus.ConfirmingRemoval(persistentListOf(legacy)), expectMostRecentItem().refresh)
+                assertEquals(RefreshStatus.ConfirmingRemoval(persistentListOf(legacy), withPresets = 0), expectMostRecentItem().refresh)
                 assertTrue(repository.appliedRefreshes.isEmpty())
 
                 viewModel.confirmRefresh()
-                assertEquals(RefreshStatus.Done(diff, warningCount = 0), expectMostRecentItem().refresh)
+                assertEquals(RefreshStatus.Done(diff, warningCount = 0, serversChanged = false), expectMostRecentItem().refresh)
                 assertEquals(1, repository.appliedRefreshes.size)
             }
         }

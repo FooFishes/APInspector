@@ -21,6 +21,8 @@ data class SpecEntity(
     /** 置顶时间（epoch 毫秒）；未置顶为 `null`。 */
     @ColumnInfo(name = "pinned_at") val pinnedAt: Long?,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    /** 当前环境（PRD 5）；不设外键，指向的环境不存在时退回第一个环境。 */
+    @ColumnInfo(name = "current_environment_id") val currentEnvironmentId: String? = null,
 )
 
 enum class SpecOriginType {
