@@ -63,6 +63,7 @@ import work.foofish.apinspector.response.BodyView
 import work.foofish.apinspector.response.JsonViewKind
 import work.foofish.apinspector.response.JsonViewRow
 import work.foofish.apinspector.response.ResponseDetail
+import work.foofish.apinspector.ui.component.SegmentedLabel
 import work.foofish.apinspector.ui.component.rememberSyncedTextFieldState
 import work.foofish.apinspector.ui.text.formatFileSize
 import work.foofish.apinspector.ui.theme.codeSmall
@@ -189,9 +190,7 @@ private fun DisplaySwitch(
                 selected = display == entry,
                 onClick = { onChange(entry) },
                 shape = SegmentedButtonDefaults.itemShape(index, BodyDisplay.entries.size),
-                label = {
-                    Text(stringResource(if (entry == BodyDisplay.TREE) R.string.detail_tree else R.string.detail_raw), maxLines = 1)
-                },
+                label = { SegmentedLabel(stringResource(if (entry == BodyDisplay.TREE) R.string.detail_tree else R.string.detail_raw)) },
             )
         }
     }

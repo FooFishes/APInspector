@@ -50,6 +50,7 @@ import work.foofish.apinspector.settings.ProxyType
 import work.foofish.apinspector.settings.SettingsRepository
 import work.foofish.apinspector.ui.component.BackButton
 import work.foofish.apinspector.ui.component.ConfirmDialog
+import work.foofish.apinspector.ui.component.SegmentedLabel
 import work.foofish.apinspector.ui.text.formatFileSize
 import javax.inject.Inject
 
@@ -191,13 +192,13 @@ private fun ProxySettings(
                 selected = proxy == null,
                 onClick = { onChange(null) },
                 shape = SegmentedButtonDefaults.itemShape(0, 2),
-                label = { Text(stringResource(R.string.proxy_direct)) },
+                label = { SegmentedLabel(stringResource(R.string.proxy_direct)) },
             )
             SegmentedButton(
                 selected = proxy != null,
                 onClick = { if (proxy == null) onChange(ProxyConfig(ProxyType.HTTP, host = "", port = 0)) },
                 shape = SegmentedButtonDefaults.itemShape(1, 2),
-                label = { Text(stringResource(R.string.proxy_custom)) },
+                label = { SegmentedLabel(stringResource(R.string.proxy_custom)) },
             )
         }
         proxy?.let { ProxyConfigEditor(it, onChange) }

@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import work.foofish.apinspector.R
 import work.foofish.apinspector.settings.ProxyConfig
 import work.foofish.apinspector.settings.ProxyType
+import work.foofish.apinspector.ui.component.SegmentedLabel
 import work.foofish.apinspector.ui.component.rememberSyncedTextFieldState
 import work.foofish.apinspector.ui.theme.codeMedium
 
@@ -39,7 +40,7 @@ fun ProxyConfigEditor(
                     selected = config.type == type,
                     onClick = { onChange(config.copy(type = type)) },
                     shape = SegmentedButtonDefaults.itemShape(index, ProxyType.entries.size),
-                    label = { Text(stringResource(if (type == ProxyType.HTTP) R.string.proxy_http else R.string.proxy_socks5)) },
+                    label = { SegmentedLabel(stringResource(if (type == ProxyType.HTTP) R.string.proxy_http else R.string.proxy_socks5)) },
                 )
             }
         }

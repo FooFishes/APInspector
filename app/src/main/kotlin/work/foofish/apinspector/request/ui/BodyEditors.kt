@@ -43,6 +43,7 @@ import work.foofish.apinspector.request.BodyEditor
 import work.foofish.apinspector.request.BodyMode
 import work.foofish.apinspector.request.FileTarget
 import work.foofish.apinspector.request.body.FieldSchema
+import work.foofish.apinspector.ui.component.SegmentedLabel
 import work.foofish.apinspector.ui.component.rememberSyncedTextFieldState
 import work.foofish.apinspector.ui.text.formatFileSize
 import work.foofish.apinspector.ui.text.label
@@ -89,7 +90,7 @@ internal fun BodyModeSwitch(
                 onClick = { onModeChange(entry) },
                 shape = SegmentedButtonDefaults.itemShape(index, BodyMode.entries.size),
                 enabled = entry == BodyMode.RAW || visualEnabled,
-                label = { Text(stringResource(entry.label())) },
+                label = { SegmentedLabel(stringResource(entry.label())) },
             )
         }
     }
@@ -250,7 +251,7 @@ private fun PartTypeSwitch(
                 selected = file == isFile,
                 onClick = { onChange(isFile) },
                 shape = SegmentedButtonDefaults.itemShape(index, 2),
-                label = { Text(stringResource(if (isFile) R.string.request_part_file else R.string.request_part_text)) },
+                label = { SegmentedLabel(stringResource(if (isFile) R.string.request_part_file else R.string.request_part_text)) },
             )
         }
     }

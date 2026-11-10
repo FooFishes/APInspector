@@ -63,6 +63,7 @@ import work.foofish.apinspector.ui.component.BackButton
 import work.foofish.apinspector.ui.component.ConfirmDialog
 import work.foofish.apinspector.ui.component.EmptyState
 import work.foofish.apinspector.ui.component.LoadingState
+import work.foofish.apinspector.ui.component.SegmentedLabel
 import work.foofish.apinspector.ui.text.formatDateTime
 import work.foofish.apinspector.ui.theme.codeSmall
 import java.time.Instant
@@ -311,7 +312,7 @@ private fun ColumnScope.CredentialFields(
                             selected = credential.location == location,
                             onClick = { onChange(credential.copy(location = location)) },
                             shape = SegmentedButtonDefaults.itemShape(index, ApiKeyLocation.entries.size),
-                            label = { Text(stringResource(location.label())) },
+                            label = { SegmentedLabel(stringResource(location.label())) },
                         )
                     }
                 }
@@ -391,7 +392,7 @@ private fun ProxyChoiceEditor(
                         )
                     },
                     shape = SegmentedButtonDefaults.itemShape(index, choices.size),
-                    label = { Text(stringResource(label)) },
+                    label = { SegmentedLabel(stringResource(label)) },
                 )
             }
         }
