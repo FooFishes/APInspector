@@ -45,4 +45,4 @@ public fun OpenApiDocument.environmentTemplates(): List<EnvironmentTemplate> {
 private fun Server.displayName(): String = name?.takeIf { it.isNotBlank() } ?: description?.takeIf { it.isNotBlank() } ?: url
 
 /** Server URL 中的 `{name}`；不匹配已经是 `{{name}}` 的写法。 */
-private val SERVER_VARIABLE = Regex("""(?<!\{)\{([^{}]+)}(?!})""")
+private val SERVER_VARIABLE = Regex("""(?<!\{)\{([^\{\}]+)\}(?!\})""")

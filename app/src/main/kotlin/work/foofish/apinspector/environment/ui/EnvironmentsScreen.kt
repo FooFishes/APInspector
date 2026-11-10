@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -148,6 +149,11 @@ private fun EnvironmentRow(
     onDialog: (EnvironmentDialog) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val status =
+        listOfNotNull(
+            stringResource(R.string.environment_current).takeIf { current },
+            stringResource(R.string.environment_incomplete).takeIf { environment.incomplete },
+        ).joinToString(stringResource(R.string.spec_info_separator))
     ListItem(
         onClick = onClick,
         modifier = modifier,
@@ -159,19 +165,10 @@ private fun EnvironmentRow(
             )
         },
         supportingContent =
-            when {
-                current -> ({ Text(stringResource(R.string.environment_current)) })
-
-                environment.incomplete -> (
-                    {
-                        Text(
-                            stringResource(R.string.environment_incomplete),
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                )
-
-                else -> null
+            status.takeIf { it.isNotEmpty() }?.let {
+                {
+                    Text(it, color = if (environment.incomplete) MaterialTheme.colorScheme.error else Color.Unspecified)
+                }
             },
         trailingContent = { EnvironmentMenu(environment, current, canDelete, onSelect, onDialog) },
         colors =

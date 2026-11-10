@@ -6,7 +6,7 @@ package work.foofish.apinspector.openapi.request
  * 变量名由字母、数字、`_`、`-`、`.` 组成；其他 `{{…}}`（例如 JSON 中本来就有的字面量）不是变量，按原文保留。
  */
 public object Variables {
-    private val REFERENCE = Regex("""\{\{([A-Za-z0-9_.\-]+)}}""")
+    private val REFERENCE = Regex("""\{\{([A-Za-z0-9_.\-]+)\}\}""")
 
     /** [name] 是否可以作为变量名。 */
     public fun isValidName(name: String): Boolean = REFERENCE.matches("{{$name}}")

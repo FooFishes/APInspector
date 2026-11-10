@@ -164,7 +164,7 @@ private fun OverviewTab(
             Fact(stringResource(R.string.detail_environment), entry.environmentName ?: stringResource(R.string.environment_none))
             Fact(stringResource(R.string.detail_total_time), formatDuration(entry.duration))
             response?.let { received ->
-                Fact(stringResource(R.string.detail_status), "${received.statusCode} ${received.statusMessage}")
+                Fact(stringResource(R.string.detail_status), "${received.statusCode} ${received.statusMessage}".trimEnd())
                 Fact(stringResource(R.string.detail_protocol), received.protocol)
                 received.timings.dns?.let { Fact(stringResource(R.string.detail_dns), formatDuration(it)) }
                 received.timings.connect?.let { Fact(stringResource(R.string.detail_connect), formatDuration(it)) }

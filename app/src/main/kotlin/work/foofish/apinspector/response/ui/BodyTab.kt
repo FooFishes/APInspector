@@ -146,24 +146,26 @@ private fun TextualBody(
     actions: ResponseDetailActions,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier) {
-        Row(
-            modifier = Modifier.padding(horizontal = DetailPadding, vertical = DetailSpacing),
-            horizontalArrangement = Arrangement.spacedBy(DetailSpacing),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            val query = rememberSyncedTextFieldState(detail.query, actions.onQueryChange)
-            OutlinedTextField(
-                state = query,
-                modifier = Modifier.weight(1f),
-                placeholder = { Text(stringResource(R.string.detail_search)) },
-                leadingIcon = { Icon(painterResource(R.drawable.ic_search), contentDescription = null) },
-                lineLimits = TextFieldLineLimits.SingleLine,
-            )
-            if (treeAvailable) DisplaySwitch(detail.display, actions.onDisplayChange)
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(DetailSpacing)) {
+        val query = rememberSyncedTextFieldState(detail.query, actions.onQueryChange)
+        OutlinedTextField(
+            state = query,
+            modifier = Modifier.fillMaxWidth().padding(start = DetailPadding, end = DetailPadding, top = DetailSpacing),
+            placeholder = { Text(stringResource(R.string.detail_search)) },
+            leadingIcon = { Icon(painterResource(R.drawable.ic_search), contentDescription = null) },
+            lineLimits = TextFieldLineLimits.SingleLine,
+        )
+        if (treeAvailable || file != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = DetailPadding),
+                horizontalArrangement = Arrangement.spacedBy(DetailSpacing),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (treeAvailable) DisplaySwitch(detail.display, actions.onDisplayChange, Modifier.weight(1f))
+                file?.let { SaveBodyButton(it, suggestedName, actions.onSaveBody) }
+            }
         }
         if (limited) Notice(stringResource(R.string.detail_display_limited))
-        file?.let { SaveBodyButton(it, suggestedName, actions.onSaveBody, Modifier.padding(horizontal = DetailPadding)) }
         val rows = detail.rows
         if (rows != null) {
             LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(vertical = DetailSpacing)) {
@@ -179,14 +181,17 @@ private fun TextualBody(
 private fun DisplaySwitch(
     display: BodyDisplay,
     onChange: (BodyDisplay) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    SingleChoiceSegmentedButtonRow {
+    SingleChoiceSegmentedButtonRow(modifier) {
         BodyDisplay.entries.forEachIndexed { index, entry ->
             SegmentedButton(
                 selected = display == entry,
                 onClick = { onChange(entry) },
                 shape = SegmentedButtonDefaults.itemShape(index, BodyDisplay.entries.size),
-                label = { Text(stringResource(if (entry == BodyDisplay.TREE) R.string.detail_tree else R.string.detail_raw)) },
+                label = {
+                    Text(stringResource(if (entry == BodyDisplay.TREE) R.string.detail_tree else R.string.detail_raw), maxLines = 1)
+                },
             )
         }
     }
