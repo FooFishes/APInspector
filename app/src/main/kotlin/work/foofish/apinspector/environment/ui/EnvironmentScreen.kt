@@ -36,6 +36,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import okhttp3.Cookie
 import work.foofish.apinspector.R
@@ -60,12 +61,19 @@ import work.foofish.apinspector.settings.ui.ProxyConfigEditor
 import work.foofish.apinspector.settings.ui.SecretField
 import work.foofish.apinspector.settings.ui.SettingTextField
 import work.foofish.apinspector.ui.component.BackButton
+import work.foofish.apinspector.ui.component.CardRow
+import work.foofish.apinspector.ui.component.ChoiceGroup
 import work.foofish.apinspector.ui.component.ConfirmDialog
 import work.foofish.apinspector.ui.component.EmptyState
 import work.foofish.apinspector.ui.component.LoadingState
-import work.foofish.apinspector.ui.component.SegmentedLabel
+import work.foofish.apinspector.ui.component.SectionLabel
+import work.foofish.apinspector.ui.component.cardRows
 import work.foofish.apinspector.ui.text.formatDateTime
+import work.foofish.apinspector.ui.theme.CardPadding
+import work.foofish.apinspector.ui.theme.ScreenPadding
 import work.foofish.apinspector.ui.theme.codeSmall
+import work.foofish.apinspector.ui.theme.screen
+import work.foofish.apinspector.ui.theme.screenTopAppBarColors
 import java.time.Instant
 
 /** 编辑环境（PRD 5、6）：基本、变量、鉴权、网络与 Cookie，编辑即时保存。 */
@@ -80,6 +88,7 @@ fun EnvironmentScreen(
     var confirmClearCookies by remember { mutableStateOf(false) }
     Scaffold(
         modifier = modifier,
+        containerColor = MaterialTheme.colorScheme.screen,
         topBar = {
             TopAppBar(
                 title = { Text(state.environment?.name.orEmpty()) },
@@ -88,6 +97,7 @@ fun EnvironmentScreen(
                         BackButton(onClick = onBack)
                     }
                 },
+                colors = screenTopAppBarColors(),
             )
         },
     ) { innerPadding ->
@@ -105,14 +115,7 @@ fun EnvironmentScreen(
 
             else -> {
                 LazyColumn(
-                    contentPadding =
-                        PaddingValues(
-                            top = innerPadding.calculateTopPadding(),
-                            bottom = BottomPadding,
-                            start = ScreenPadding,
-                            end = ScreenPadding,
-                        ),
-                    verticalArrangement = Arrangement.spacedBy(FieldSpacing),
+                    contentPadding = PaddingValues(top = innerPadding.calculateTopPadding(), bottom = BottomPadding),
                 ) {
                     basicSection(environment, viewModel::update)
                     variablesSection(environment.variables.toImmutableList(), viewModel::update)
@@ -133,6 +136,7 @@ fun EnvironmentScreen(
                 confirmClearCookies = false
             },
             onDismiss = { confirmClearCookies = false },
+            destructive = true,
         )
     }
 }
@@ -141,14 +145,7 @@ private fun LazyListScope.sectionTitle(
     key: String,
     title: Int,
 ) {
-    item(key = key) {
-        Text(
-            text = stringResource(title),
-            modifier = Modifier.padding(top = SectionSpacing),
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.primary,
-        )
-    }
+    item(key = key) { SectionLabel(stringResource(title), Modifier.padding(horizontal = ScreenPadding)) }
 }
 
 private fun LazyListScope.basicSection(
@@ -156,24 +153,29 @@ private fun LazyListScope.basicSection(
     onUpdate: ((Environment) -> Environment) -> Unit,
 ) {
     sectionTitle("basic", R.string.environment_basic)
-    item(key = "name") {
-        SettingTextField(environment.name, { name ->
-            onUpdate {
-                it.copy(name = name)
-            }
-        }, stringResource(R.string.environment_name), Modifier.fillMaxWidth())
-    }
-    item(key = "baseUrl") {
-        SettingTextField(
-            value = environment.baseUrl,
-            onValueChange = { url -> onUpdate { it.copy(baseUrl = url.trim()) } },
-            label = stringResource(R.string.environment_base_url),
-            modifier = Modifier.fillMaxWidth(),
-            supporting = if (environment.isBaseUrlIncomplete) stringResource(R.string.environment_incomplete_hint) else null,
-            isError = environment.isBaseUrlIncomplete,
-            code = true,
-        )
-    }
+    cardRows(
+        listOf(
+            CardRow("name") {
+                SettingTextField(
+                    value = environment.name,
+                    onValueChange = { name -> onUpdate { it.copy(name = name) } },
+                    label = stringResource(R.string.environment_name),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            CardRow("baseUrl") {
+                SettingTextField(
+                    value = environment.baseUrl,
+                    onValueChange = { url -> onUpdate { it.copy(baseUrl = url.trim()) } },
+                    label = stringResource(R.string.environment_base_url),
+                    modifier = Modifier.fillMaxWidth(),
+                    supporting = if (environment.isBaseUrlIncomplete) stringResource(R.string.environment_incomplete_hint) else null,
+                    isError = environment.isBaseUrlIncomplete,
+                    code = true,
+                )
+            },
+        ),
+    )
 }
 
 /** 变量（PRD 5）：由 server 变量生成的变量提供 enum 候选。 */
@@ -183,52 +185,58 @@ private fun LazyListScope.variablesSection(
 ) {
     fun update(transform: (List<EnvironmentVariable>) -> List<EnvironmentVariable>) =
         onUpdate { it.copy(variables = transform(it.variables)) }
+
+    fun replace(
+        index: Int,
+        transform: (EnvironmentVariable) -> EnvironmentVariable,
+    ) = update { list -> list.mapIndexed { i, old -> if (i == index) transform(old) else old } }
+
     sectionTitle("variables", R.string.environment_variables)
-    itemsIndexed(variables, key = { index, _ -> "variable/$index" }) { index, variable ->
-        Row(horizontalArrangement = Arrangement.spacedBy(FieldSpacing), verticalAlignment = Alignment.CenterVertically) {
-            ValueField(
-                value = variable.name,
-                onValueChange = { name ->
-                    update { list ->
-                        list.mapIndexed { i, old ->
-                            if (i ==
-                                index
-                            ) {
-                                old.copy(name = name.trim())
-                            } else {
-                                old
-                            }
-                        }
-                    }
-                },
-                choices = NoChoices,
-                label = stringResource(R.string.request_name),
-                modifier = Modifier.weight(NAME_WEIGHT),
-            )
-            ValueField(
-                value = variable.value,
-                onValueChange = { value ->
-                    update { list ->
-                        list.mapIndexed { i, old ->
-                            if (i ==
-                                index
-                            ) {
-                                old.copy(value = value)
-                            } else {
-                                old
-                            }
-                        }
-                    }
-                },
-                choices = variable.candidates.toImmutableList(),
-                label = stringResource(R.string.request_value),
-                modifier = Modifier.weight(VALUE_WEIGHT),
-            )
-            RemoveButton({ update { list -> list.filterIndexed { i, _ -> i != index } } })
+    val rows =
+        variables.mapIndexed { index, variable ->
+            CardRow("variable/$index") {
+                VariableRow(
+                    variable = variable,
+                    onNameChange = { name -> replace(index) { it.copy(name = name.trim()) } },
+                    onValueChange = { value -> replace(index) { it.copy(value = value) } },
+                    onRemove = { update { list -> list.filterIndexed { i, _ -> i != index } } },
+                )
+            }
         }
-    }
-    item(key = "variables/add") {
-        AddButton(stringResource(R.string.environment_add_variable), onClick = { update { it + EnvironmentVariable("", "") } })
+    val add =
+        CardRow("variables/add") {
+            AddButton(stringResource(R.string.environment_add_variable), onClick = { update { it + EnvironmentVariable("", "") } })
+        }
+    cardRows(rows + add, startInset = ControlInset)
+}
+
+@Composable
+private fun VariableRow(
+    variable: EnvironmentVariable,
+    onNameChange: (String) -> Unit,
+    onValueChange: (String) -> Unit,
+    onRemove: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.padding(start = CardPadding - ControlInset),
+        horizontalArrangement = Arrangement.spacedBy(FieldSpacing),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ValueField(
+            value = variable.name,
+            onValueChange = onNameChange,
+            choices = NoChoices,
+            label = stringResource(R.string.request_name),
+            modifier = Modifier.weight(NAME_WEIGHT),
+        )
+        ValueField(
+            value = variable.value,
+            onValueChange = onValueChange,
+            choices = variable.candidates.toImmutableList(),
+            label = stringResource(R.string.request_value),
+            modifier = Modifier.weight(VALUE_WEIGHT),
+        )
+        RemoveButton(onRemove)
     }
 }
 
@@ -240,27 +248,30 @@ private fun LazyListScope.authSection(
 ) {
     sectionTitle("auth", R.string.environment_auth)
     if (schemes.isEmpty()) {
-        item(key = "auth/none") { Muted(stringResource(R.string.environment_auth_none)) }
+        cardRows(listOf(CardRow("auth/none") { Muted(stringResource(R.string.environment_auth_none)) }))
         return
     }
-    items(schemes, key = { "auth/${it.name}" }) { option ->
-        val credential = environment.credentials[option.name]?.takeIf(option.scheme::accepts) ?: option.scheme.blankCredential()
-        Column(verticalArrangement = Arrangement.spacedBy(FieldSpacing)) {
-            Text("${option.name} · ${option.scheme.describe()}", style = MaterialTheme.typography.labelLarge)
-            if (credential == null) {
-                Muted(stringResource(R.string.environment_auth_unsupported))
-            } else {
-                CredentialEditor(credential, onChange = { updated ->
-                    onUpdate {
-                        it.copy(
-                            credentials =
-                                it.credentials + (option.name to updated),
+    cardRows(
+        schemes.map { option ->
+            CardRow("auth/${option.name}") {
+                val credential = environment.credentials[option.name]?.takeIf(option.scheme::accepts) ?: option.scheme.blankCredential()
+                Column(verticalArrangement = Arrangement.spacedBy(FieldSpacing)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(FieldSpacing), verticalAlignment = Alignment.CenterVertically) {
+                        Text(option.name, style = MaterialTheme.typography.titleSmallEmphasized)
+                        Muted(option.scheme.describe())
+                    }
+                    if (credential == null) {
+                        Muted(stringResource(R.string.environment_auth_unsupported))
+                    } else {
+                        CredentialEditor(
+                            credential,
+                            onChange = { updated -> onUpdate { it.copy(credentials = it.credentials + (option.name to updated)) } },
                         )
                     }
-                })
+                }
             }
-        }
-    }
+        },
+    )
 }
 
 @Composable
@@ -306,17 +317,15 @@ private fun ColumnScope.CredentialFields(
                 SettingTextField(credential.name, {
                     onChange(credential.copy(name = it.trim()))
                 }, stringResource(R.string.auth_api_key_name), Modifier.weight(1f), code = true)
-                SingleChoiceSegmentedButtonRow {
-                    ApiKeyLocation.entries.forEachIndexed { index, location ->
-                        SegmentedButton(
-                            selected = credential.location == location,
-                            onClick = { onChange(credential.copy(location = location)) },
-                            shape = SegmentedButtonDefaults.itemShape(index, ApiKeyLocation.entries.size),
-                            label = { SegmentedLabel(stringResource(location.label())) },
-                        )
-                    }
-                }
             }
+            ChoiceGroup(
+                options = ApiKeyLocations,
+                selected = credential.location,
+                onSelect = { onChange(credential.copy(location = it)) },
+                label = { stringResource(it.label()) },
+                modifier = Modifier.fillMaxWidth(),
+                fill = true,
+            )
         }
     }
 }
@@ -327,16 +336,22 @@ private fun LazyListScope.networkSection(
     onChange: (EnvironmentNetwork) -> Unit,
 ) {
     sectionTitle("network", R.string.environment_network)
-    item(key = "network/tls") {
-        SwitchRow(
-            title = stringResource(R.string.environment_skip_tls),
-            description = stringResource(R.string.environment_skip_tls_hint),
-            checked = network.skipTlsVerification,
-            warning = network.skipTlsVerification,
-        ) { onChange(network.copy(skipTlsVerification = it)) }
-    }
-    item(key = "network/timeout") { TimeoutOverride(network.timeoutSeconds, onChange = { onChange(network.copy(timeoutSeconds = it)) }) }
-    item(key = "network/proxy") { ProxyChoiceEditor(network.proxy, onChange = { onChange(network.copy(proxy = it)) }) }
+    cardRows(
+        listOf(
+            CardRow("network/tls") {
+                SwitchRow(
+                    title = stringResource(R.string.environment_skip_tls),
+                    description = stringResource(R.string.environment_skip_tls_hint),
+                    checked = network.skipTlsVerification,
+                    warning = network.skipTlsVerification,
+                ) { onChange(network.copy(skipTlsVerification = it)) }
+            },
+            CardRow(
+                "network/timeout",
+            ) { TimeoutOverride(network.timeoutSeconds, onChange = { onChange(network.copy(timeoutSeconds = it)) }) },
+            CardRow("network/proxy") { ProxyChoiceEditor(network.proxy, onChange = { onChange(network.copy(proxy = it)) }) },
+        ),
+    )
 }
 
 /** 超时：跟随全局设置（`null`）或覆盖为指定秒数。 */
@@ -369,7 +384,6 @@ private fun ProxyChoiceEditor(
     onChange: (ProxyChoice) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val choices = listOf(R.string.proxy_follow_global, R.string.proxy_direct, R.string.proxy_custom)
     val selected =
         when (proxy) {
             ProxyChoice.FollowGlobal -> FOLLOW_GLOBAL
@@ -378,24 +392,30 @@ private fun ProxyChoiceEditor(
         }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(FieldSpacing)) {
         Text(stringResource(R.string.settings_proxy), style = MaterialTheme.typography.bodyLarge)
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            choices.forEachIndexed { index, label ->
-                SegmentedButton(
-                    selected = selected == index,
-                    onClick = {
-                        onChange(
-                            when (index) {
-                                FOLLOW_GLOBAL -> ProxyChoice.FollowGlobal
-                                DIRECT -> ProxyChoice.Direct
-                                else -> proxy as? ProxyChoice.Custom ?: ProxyChoice.Custom(ProxyConfig(ProxyType.HTTP, host = "", port = 0))
-                            },
-                        )
+        ChoiceGroup(
+            options = ProxyModes,
+            selected = selected,
+            onSelect = { mode ->
+                onChange(
+                    when (mode) {
+                        FOLLOW_GLOBAL -> ProxyChoice.FollowGlobal
+                        DIRECT -> ProxyChoice.Direct
+                        else -> proxy as? ProxyChoice.Custom ?: ProxyChoice.Custom(ProxyConfig(ProxyType.HTTP, host = "", port = 0))
                     },
-                    shape = SegmentedButtonDefaults.itemShape(index, choices.size),
-                    label = { SegmentedLabel(stringResource(label)) },
                 )
-            }
-        }
+            },
+            label = { mode ->
+                stringResource(
+                    when (mode) {
+                        FOLLOW_GLOBAL -> R.string.proxy_follow_global
+                        DIRECT -> R.string.proxy_direct
+                        else -> R.string.proxy_custom
+                    },
+                )
+            },
+            modifier = Modifier.fillMaxWidth(),
+            fill = true,
+        )
         (proxy as? ProxyChoice.Custom)?.let { custom ->
             ProxyConfigEditor(custom.config, { onChange(ProxyChoice.Custom(it)) })
         }
@@ -409,33 +429,45 @@ private fun LazyListScope.cookieSection(
     onClear: () -> Unit,
 ) {
     item(key = "cookies") {
-        Row(Modifier.fillMaxWidth().padding(top = SectionSpacing), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = stringResource(R.string.environment_cookies, cookies.size),
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
+        Row(Modifier.fillMaxWidth().padding(horizontal = ScreenPadding), verticalAlignment = Alignment.Bottom) {
+            SectionLabel(stringResource(R.string.environment_cookies, cookies.size), Modifier.weight(1f))
             TextButton(onClick = onClear, enabled = cookies.isNotEmpty()) { Text(stringResource(R.string.cookie_clear)) }
         }
     }
-    cookies.groupBy { it.domain }.forEach { (domain, group) ->
-        item(key = "cookies/$domain") { Text(domain, style = MaterialTheme.typography.labelLarge) }
-        items(group, key = { "cookie/${it.domain}/${it.path}/${it.name}" }) { cookie ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("${cookie.name}=${cookie.value}", style = MaterialTheme.typography.codeSmall, maxLines = 2)
-                    Muted(
-                        if (cookie.persistent) {
-                            stringResource(R.string.cookie_expires, cookie.path, formatDateTime(Instant.ofEpochMilli(cookie.expiresAt)))
-                        } else {
-                            stringResource(R.string.cookie_session, cookie.path)
-                        },
-                    )
-                }
-                RemoveButton({ onDelete(cookie) })
-            }
+    if (cookies.isEmpty()) {
+        cardRows(listOf(CardRow("cookies/none") { Muted(stringResource(R.string.cookie_none)) }))
+        return
+    }
+    cardRows(
+        rows =
+            cookies.groupBy { it.domain }.flatMap { (domain, group) ->
+                listOf(CardRow("cookies/$domain") { Text(domain, style = MaterialTheme.typography.titleSmallEmphasized) }) +
+                    group.map { cookie ->
+                        CardRow(
+                            "cookie/${cookie.domain}/${cookie.path}/${cookie.name}",
+                        ) { CookieRow(cookie, onDelete = { onDelete(cookie) }) }
+                    }
+            },
+    )
+}
+
+@Composable
+private fun CookieRow(
+    cookie: Cookie,
+    onDelete: () -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("${cookie.name}=${cookie.value}", style = MaterialTheme.typography.codeSmall, maxLines = 2)
+            Muted(
+                if (cookie.persistent) {
+                    stringResource(R.string.cookie_expires, cookie.path, formatDateTime(Instant.ofEpochMilli(cookie.expiresAt)))
+                } else {
+                    stringResource(R.string.cookie_session, cookie.path)
+                },
+            )
         }
+        RemoveButton(onDelete)
     }
 }
 
@@ -481,8 +513,11 @@ private fun ApiKeyLocation.label(): Int =
     }
 
 private val NoChoices = emptyList<String>().toImmutableList()
-private val ScreenPadding = 16.dp
-private val SectionSpacing = 16.dp
+private val ApiKeyLocations = ApiKeyLocation.entries.toImmutableList()
+private val ProxyModes = persistentListOf(FOLLOW_GLOBAL, DIRECT, CUSTOM)
+
+/** 左侧自带按钮的行：按钮自身已有留白，行内容更贴近卡片左缘。 */
+private val ControlInset = 4.dp
 private val BottomPadding = 32.dp
 private const val NAME_WEIGHT = 2f
 private const val VALUE_WEIGHT = 3f

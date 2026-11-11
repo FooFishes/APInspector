@@ -13,34 +13,43 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
@@ -53,6 +62,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -63,9 +73,11 @@ import work.foofish.apinspector.response.BodyView
 import work.foofish.apinspector.response.JsonViewKind
 import work.foofish.apinspector.response.JsonViewRow
 import work.foofish.apinspector.response.ResponseDetail
-import work.foofish.apinspector.ui.component.SegmentedLabel
+import work.foofish.apinspector.ui.component.ChoiceGroup
+import work.foofish.apinspector.ui.component.PillSearchField
 import work.foofish.apinspector.ui.component.rememberSyncedTextFieldState
 import work.foofish.apinspector.ui.text.formatFileSize
+import work.foofish.apinspector.ui.theme.card
 import work.foofish.apinspector.ui.theme.codeSmall
 import java.io.File
 
@@ -148,32 +160,45 @@ private fun TextualBody(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(DetailSpacing)) {
+        // 工具行只占一行：平时是显示方式、搜索与另存；点搜索后整行变成搜索框。
         val query = rememberSyncedTextFieldState(detail.query, actions.onQueryChange)
-        OutlinedTextField(
-            state = query,
+        var searching by rememberSaveable { mutableStateOf(detail.query.isNotEmpty()) }
+        Row(
             modifier = Modifier.fillMaxWidth().padding(start = DetailPadding, end = DetailPadding, top = DetailSpacing),
-            placeholder = { Text(stringResource(R.string.detail_search)) },
-            leadingIcon = { Icon(painterResource(R.drawable.ic_search), contentDescription = null) },
-            lineLimits = TextFieldLineLimits.SingleLine,
-        )
-        if (treeAvailable || file != null) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = DetailPadding),
-                horizontalArrangement = Arrangement.spacedBy(DetailSpacing),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (treeAvailable) DisplaySwitch(detail.display, actions.onDisplayChange, Modifier.weight(1f))
-                file?.let { SaveBodyButton(it, suggestedName, actions.onSaveBody) }
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (searching) {
+                PillSearchField(query, stringResource(R.string.detail_search), Modifier.weight(1f), onClose = { searching = false })
+            } else {
+                if (treeAvailable) DisplaySwitch(detail.display, actions.onDisplayChange)
+                Spacer(Modifier.weight(1f))
+                FilledTonalIconButton(onClick = { searching = true }) {
+                    Icon(painterResource(R.drawable.ic_search), contentDescription = stringResource(R.string.detail_search))
+                }
+                file?.let { SaveBodyIconButton(it, suggestedName, actions.onSaveBody) }
             }
         }
         if (limited) Notice(stringResource(R.string.detail_display_limited))
         val rows = detail.rows
-        if (rows != null) {
-            LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(vertical = DetailSpacing)) {
-                items(rows, key = JsonViewRow::path) { row -> JsonTreeRow(row, actions.onToggle) }
+        Surface(
+            modifier =
+                Modifier
+                    .weight(
+                        1f,
+                    ).fillMaxWidth()
+                    .padding(horizontal = DetailPadding)
+                    .padding(bottom = DetailPadding)
+                    .navigationBarsPadding(),
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.card,
+        ) {
+            if (rows != null) {
+                LazyColumn(contentPadding = PaddingValues(vertical = DetailSpacing)) {
+                    items(rows, key = JsonViewRow::path) { row -> JsonTreeRow(row, actions.onToggle) }
+                }
+            } else {
+                RawText(detail.formatted.orEmpty(), detail.query)
             }
-        } else {
-            RawText(detail.formatted.orEmpty(), detail.query, Modifier.weight(1f))
         }
     }
 }
@@ -184,16 +209,13 @@ private fun DisplaySwitch(
     onChange: (BodyDisplay) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    SingleChoiceSegmentedButtonRow(modifier) {
-        BodyDisplay.entries.forEachIndexed { index, entry ->
-            SegmentedButton(
-                selected = display == entry,
-                onClick = { onChange(entry) },
-                shape = SegmentedButtonDefaults.itemShape(index, BodyDisplay.entries.size),
-                label = { SegmentedLabel(stringResource(if (entry == BodyDisplay.TREE) R.string.detail_tree else R.string.detail_raw)) },
-            )
-        }
-    }
+    ChoiceGroup(
+        options = BodyDisplays,
+        selected = display,
+        onSelect = onChange,
+        label = { stringResource(if (it == BodyDisplay.TREE) R.string.detail_tree else R.string.detail_raw) },
+        modifier = modifier,
+    )
 }
 
 /** 折叠树的一行；长按复制值或路径。 */
@@ -231,7 +253,7 @@ private fun JsonTreeRow(
             }
             Text(text = treeText(row), style = MaterialTheme.typography.codeSmall)
         }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, shape = MaterialTheme.shapes.large) {
             row.value?.let { value ->
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.detail_copy_value)) },
@@ -351,6 +373,7 @@ private fun Notice(text: String) {
 private const val DEFAULT_FILE_NAME = "response"
 private const val COLLAPSED_ROTATION = -90f
 private const val MAX_IMAGE_DIMENSION = 2048
+private val BodyDisplays = BodyDisplay.entries.toImmutableList()
 private val TreeIndent = 16.dp
 private val TreeRowPadding = 4.dp
 private val TreeIconSize = 18.dp

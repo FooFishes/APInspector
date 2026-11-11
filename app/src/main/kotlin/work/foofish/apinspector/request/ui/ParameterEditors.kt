@@ -1,5 +1,7 @@
 package work.foofish.apinspector.request.ui
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +26,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextFieldLabelScope
 import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
@@ -39,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -50,6 +54,8 @@ import work.foofish.apinspector.openapi.request.ParameterShape
 import work.foofish.apinspector.openapi.request.ParameterValue
 import work.foofish.apinspector.operationdoc.TypeLabel
 import work.foofish.apinspector.request.ParameterField
+import work.foofish.apinspector.ui.component.FieldShape
+import work.foofish.apinspector.ui.component.fieldColors
 import work.foofish.apinspector.ui.component.rememberSyncedTextFieldState
 import work.foofish.apinspector.ui.theme.codeMedium
 import work.foofish.apinspector.ui.theme.codeSmall
@@ -57,6 +63,8 @@ import work.foofish.apinspector.ui.theme.codeSmall
 /**
  * 一个声明参数的编辑行（PRD 4.1）：名称、类型与必填标记；长按名称查看描述。
  * 非必填参数有勾选框，不勾选则不发送但保留值。
+ *
+ * @param reserveToggle 是否为勾选框留出一列；整个分区都是必填参数时不必留，输入框可以用满宽度。
  */
 @Composable
 internal fun ParameterFieldRow(
@@ -64,21 +72,33 @@ internal fun ParameterFieldRow(
     onValueChange: (ParameterValue) -> Unit,
     onEnabledChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    reserveToggle: Boolean = true,
 ) {
+    // 普通的单值参数只占一行：名称、类型与必填标记作为输入框的标签。
+    // 已废弃或会被忽略的参数、以及数组 / 对象参数仍然单独显示标题行。
+    val compact = field.shape == ParameterShape.TEXT && !field.deprecated && !field.ignored
     Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        Box(Modifier.size(CheckboxSlot), contentAlignment = Alignment.Center) {
-            if (!field.alwaysSent) Checkbox(checked = field.enabled, onCheckedChange = onEnabledChange)
+        if (reserveToggle) {
+            Box(
+                modifier = Modifier.padding(top = if (compact) FieldLabelOffset else NoOffset).size(CheckboxSlot),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (!field.alwaysSent) Checkbox(checked = field.enabled, onCheckedChange = onEnabledChange)
+            }
+        } else {
+            Spacer(Modifier.width(NoToggleInset))
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(FieldSpacing)) {
-            ParameterHeading(field)
+            if (!compact) ParameterHeading(field)
             when (field.shape) {
                 ParameterShape.TEXT -> {
                     ValueField(
                         value = (field.value as? ParameterValue.Text)?.text.orEmpty(),
                         onValueChange = { onValueChange(ParameterValue.Text(it)) },
                         choices = field.choices,
-                        label = null,
+                        label = if (compact) field.fieldLabel() else null,
                         modifier = Modifier.fillMaxWidth(),
+                        description = field.description.takeIf { compact },
                     )
                 }
 
@@ -96,6 +116,10 @@ internal fun ParameterFieldRow(
         }
     }
 }
+
+/** 输入框的标签，例如 `petId · integer(int64) *`（`*` 表示必填）。 */
+private fun ParameterField.fieldLabel(): String =
+    listOfNotNull(name, type?.text).joinToString(LABEL_SEPARATOR) + if (required) REQUIRED_MARK else ""
 
 @Composable
 private fun ParameterHeading(field: ParameterField) {
@@ -138,6 +162,8 @@ internal fun TypeText(
         modifier = modifier,
         style = MaterialTheme.typography.codeSmall,
         color = if (type.kind == TypeLabel.Kind.UNRESOLVED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
     )
 }
 
@@ -147,10 +173,14 @@ internal fun Marker(
     color: Color,
     modifier: Modifier = Modifier,
 ) {
-    Text(text = text, modifier = modifier, style = MaterialTheme.typography.labelSmall, color = color)
+    Text(text = text, modifier = modifier, style = MaterialTheme.typography.labelSmall, color = color, maxLines = 1)
 }
 
-/** 单个值的输入框；有可选值时可以从下拉中选择，也可以手动输入。 */
+/**
+ * 单个值的输入框；有可选值时可以从下拉中选择，也可以手动输入。
+ *
+ * @param description 字段说明：只在输入框获得焦点时显示在下方，正要填这个值的时候才需要它。
+ */
 @Composable
 internal fun ValueField(
     value: String,
@@ -159,28 +189,45 @@ internal fun ValueField(
     label: String?,
     modifier: Modifier = Modifier,
     isError: Boolean = false,
+    description: String? = null,
 ) {
     val state = rememberSyncedTextFieldState(value, onValueChange)
+    val interactionSource = remember { MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
+    val supportingText: (@Composable () -> Unit)? =
+        description?.takeIf { focused && it.isNotBlank() }?.let {
+            { Text(it, maxLines = DESCRIPTION_MAX_LINES, overflow = TextOverflow.Ellipsis) }
+        }
+    val labelContent: (@Composable TextFieldLabelScope.() -> Unit)? =
+        label?.let { { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) } }
     if (choices.isEmpty()) {
         OutlinedTextField(
+            shape = FieldShape,
+            colors = fieldColors(),
             state = state,
             modifier = modifier,
-            label = label?.let { { Text(it) } },
+            label = labelContent,
+            supportingText = supportingText,
             textStyle = MaterialTheme.typography.codeMedium,
             lineLimits = TextFieldLineLimits.SingleLine,
             isError = isError,
+            interactionSource = interactionSource,
         )
         return
     }
     var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }, modifier = modifier) {
         OutlinedTextField(
+            shape = FieldShape,
+            colors = fieldColors(),
             state = state,
             modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
-            label = label?.let { { Text(it) } },
+            label = labelContent,
+            supportingText = supportingText,
             textStyle = MaterialTheme.typography.codeMedium,
             lineLimits = TextFieldLineLimits.SingleLine,
             isError = isError,
+            interactionSource = interactionSource,
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -322,6 +369,16 @@ internal fun AddButton(
 internal val FieldSpacing = 8.dp
 internal val CheckboxSlot = 48.dp
 internal val SmallIcon = 18.dp
+private const val DESCRIPTION_MAX_LINES = 3
+internal const val LABEL_SEPARATOR = " · "
+internal const val REQUIRED_MARK = " *"
+
+/** 带标签的描边输入框，其描边框比组件顶部低这么多（为浮起的标签留位）。 */
+private val FieldLabelOffset = 8.dp
+private val NoOffset = 0.dp
+
+/** 不留勾选框列时，把行内容补到与卡片内边距对齐。 */
+private val NoToggleInset = 12.dp
 private const val KEY_WEIGHT = 2f
 private const val VALUE_WEIGHT = 3f
 

@@ -28,6 +28,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import work.foofish.apinspector.R
+import work.foofish.apinspector.ui.component.FieldShape
+import work.foofish.apinspector.ui.component.fieldColors
 import work.foofish.apinspector.ui.theme.codeMedium
 import work.foofish.apinspector.ui.theme.codeSmall
 
@@ -46,6 +48,8 @@ fun UrlImportDialog(
         title = { Text(stringResource(R.string.import_from_url)) },
         text = {
             OutlinedTextField(
+                shape = FieldShape,
+                colors = fieldColors(),
                 state = url,
                 label = { Text(stringResource(R.string.import_url_label)) },
                 textStyle = MaterialTheme.typography.codeMedium,
@@ -82,6 +86,8 @@ fun TextImportSheet(
         ) {
             Text(stringResource(R.string.import_text_title), style = MaterialTheme.typography.titleLarge)
             OutlinedTextField(
+                shape = FieldShape,
+                colors = fieldColors(),
                 state = text,
                 modifier = Modifier.fillMaxWidth().height(EditorHeight),
                 placeholder = { Text(stringResource(R.string.import_text_placeholder)) },

@@ -14,6 +14,7 @@
     <string name="action_expand">展开</string>
     <string name="action_collapse">收起</string>
     <string name="action_clear_search">清除搜索</string>
+    <string name="action_copy">复制</string>
 
     <!-- 首页 -->
     <string name="home_search_placeholder">搜索 API 文档</string>
@@ -151,8 +152,7 @@
     <string name="doc_deprecated">已弃用</string>
     <string name="doc_read_only">只读</string>
     <string name="doc_write_only">只写</string>
-    <string name="doc_security">鉴权：%1$s</string>
-    <string name="doc_security_alternative_separator">" 或 "</string>
+    <string name="doc_security_any">满足其一即可</string>
     <string name="doc_security_combined_separator" translatable="false">" + "</string>
     <string name="doc_security_anonymous">匿名</string>
     <string name="doc_security_none">无需鉴权</string>
@@ -163,8 +163,8 @@
     <string name="doc_unresolved">未解析的引用：%1$s</string>
     <string name="doc_item_schema">每一项</string>
     <string name="doc_additional_properties">任意键</string>
-    <string name="doc_fact_enum">可选值：%1$s</string>
-    <string name="doc_fact_default">默认：%1$s</string>
+    <string name="doc_fact_enum">可选值</string>
+    <string name="doc_fact_default">默认</string>
     <string name="doc_fact_minimum">≥ %1$s</string>
     <string name="doc_fact_minimum_exclusive">&gt; %1$s</string>
     <string name="doc_fact_maximum">≤ %1$s</string>
@@ -174,8 +174,10 @@
     <string name="doc_fact_min_items">至少 %1$d 项</string>
     <string name="doc_fact_max_items">至多 %1$d 项</string>
     <string name="doc_fact_unique_items">元素不重复</string>
-    <string name="doc_fact_pattern">格式：%1$s</string>
-    <string name="doc_fact_example">示例：%1$s</string>
+    <string name="doc_fact_pattern">格式</string>
+    <string name="doc_copy_path">复制路径</string>
+    <string name="doc_copy_operation_id">复制 operationId</string>
+    <string name="doc_copy_example">复制示例</string>
     <string name="action_add">添加</string>
     <string name="action_save">保存</string>
     <string name="doc_ignored_header">按规范默认忽略</string>
@@ -216,6 +218,7 @@
     <string name="request_choose_file">选择文件</string>
     <string name="request_blocked_title">无法发送</string>
     <string name="request_edit_environment">去编辑环境</string>
+    <string name="request_copy_url">复制 URL</string>
     <string name="request_problem_no_environment">这份 API 文档还没有环境，请先新建一个</string>
     <string name="request_problem_missing_variables">以下变量未定义或为空：%1$s</string>
     <string name="request_problem_incomplete_base_url">baseUrl 不完整（%1$s），需以 http:// 或 https:// 开头</string>
@@ -288,6 +291,7 @@
     <string name="auth_password">密码</string>
     <string name="auth_api_key_value">值</string>
     <string name="auth_api_key_name">名称</string>
+    <string name="cookie_none">这个环境还没有保存任何 Cookie</string>
     <string name="cookie_clear">清空</string>
     <string name="cookie_clear_title">清空这个环境的全部 Cookie？</string>
     <string name="cookie_expires">路径 %1$s · %2$s 过期</string>
@@ -316,7 +320,6 @@
     <string name="detail_headers">响应头</string>
     <string name="detail_request">请求</string>
     <string name="detail_export">导出</string>
-    <string name="detail_status">状态</string>
     <string name="detail_protocol">协议</string>
     <string name="detail_sent_at">发送时间</string>
     <string name="detail_source">来源</string>
@@ -326,9 +329,10 @@
     <string name="detail_connect">连接</string>
     <string name="detail_tls">TLS</string>
     <string name="detail_first_byte">首字节</string>
-    <string name="detail_size">大小</string>
     <string name="detail_final_url">最终 URL</string>
-    <string name="detail_error">错误</string>
+    <string name="detail_rest">其余</string>
+    <string name="detail_percent">%1$d%%</string>
+    <string name="detail_none">—</string>
     <string name="detail_no_headers">没有响应头</string>
     <string name="detail_no_body">没有 Body</string>
     <string name="detail_body_cleared">Body 已清理</string>
@@ -349,6 +353,8 @@
     <string name="detail_request_file">文件 %1$s</string>
 
     <!-- 请求记录 -->
+    <string name="time_today">今天</string>
+    <string name="time_yesterday">昨天</string>
     <string name="history_title">请求记录</string>
     <string name="history_empty">还没有请求记录</string>
     <string name="history_show_all">显示全部接口</string>

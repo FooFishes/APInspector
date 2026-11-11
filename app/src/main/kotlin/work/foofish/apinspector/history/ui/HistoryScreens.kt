@@ -1,22 +1,29 @@
 package work.foofish.apinspector.history.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.ListItemShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -33,15 +40,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.launch
 import work.foofish.apinspector.R
 import work.foofish.apinspector.history.HistoryEntryId
 import work.foofish.apinspector.history.HistorySummary
 import work.foofish.apinspector.history.OutcomeKind
 import work.foofish.apinspector.openapi.OperationKey
-import work.foofish.apinspector.response.ui.ActionChip
+import work.foofish.apinspector.response.ui.ReplayButton
 import work.foofish.apinspector.response.ui.ResponseDetailActions
 import work.foofish.apinspector.response.ui.ResponseDetailContent
 import work.foofish.apinspector.response.ui.SaveFailureDialog
@@ -53,10 +62,19 @@ import work.foofish.apinspector.ui.component.EmptyState
 import work.foofish.apinspector.ui.component.LoadingState
 import work.foofish.apinspector.ui.component.MethodBadge
 import work.foofish.apinspector.ui.component.OperationTitle
+import work.foofish.apinspector.ui.text.dayLabel
 import work.foofish.apinspector.ui.text.formatDuration
 import work.foofish.apinspector.ui.text.formatFileSize
+import work.foofish.apinspector.ui.text.formatTime
 import work.foofish.apinspector.ui.text.relativeTime
+import work.foofish.apinspector.ui.theme.ScreenPadding
+import work.foofish.apinspector.ui.theme.card
 import work.foofish.apinspector.ui.theme.codeMedium
+import work.foofish.apinspector.ui.theme.codeSmall
+import work.foofish.apinspector.ui.theme.screen
+import work.foofish.apinspector.ui.theme.screenTopAppBarColors
+import java.time.LocalDate
+import java.time.ZoneId
 
 /** 一份 API 文档的请求记录列表（PRD 7.1）：从新到旧，可按接口筛选、清空。 */
 @Composable
@@ -72,12 +90,16 @@ fun HistoryScreen(
     var confirmClear by remember { mutableStateOf(false) }
     Scaffold(
         modifier = modifier,
+        containerColor = MaterialTheme.colorScheme.screen,
         topBar = {
             TopAppBar(
-                title = { HistoryTitle(state.operation) },
+                title = { Text(stringResource(R.string.history_title)) },
+                // 按接口筛选时在标题下注明接口。
+                subtitle = { state.operation?.let { OperationSubtitle(it) } },
                 navigationIcon = {
                     BackButton(onClick = onBack)
                 },
+                colors = screenTopAppBarColors(),
                 actions = {
                     if (state.operation != null) {
                         IconButton(onClick = onShowAll) {
@@ -102,11 +124,13 @@ fun HistoryScreen(
             }
 
             else -> {
-                LazyColumn(contentPadding = innerPadding) {
-                    items(entries, key = { it.id.value }) { summary ->
-                        HistoryRow(summary, selected = summary.id == selected, onClick = { onOpen(summary.id) })
-                    }
-                }
+                HistoryList(
+                    entries = entries,
+                    selected = selected,
+                    singleOperation = state.operation != null,
+                    onOpen = onOpen,
+                    topPadding = innerPadding.calculateTopPadding(),
+                )
             }
         }
     }
@@ -120,6 +144,7 @@ fun HistoryScreen(
                 confirmClear = false
             },
             onDismiss = { confirmClear = false },
+            destructive = true,
         )
     }
 }
@@ -134,7 +159,7 @@ private fun HistoryMenu(
         IconButton(onClick = { expanded = true }) {
             Icon(painterResource(R.drawable.ic_more_vert), contentDescription = stringResource(R.string.action_more))
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, shape = MaterialTheme.shapes.large) {
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.history_clear)) },
                 enabled = enabled,
@@ -148,69 +173,143 @@ private fun HistoryMenu(
     }
 }
 
-/** 每行：方法、路径、状态码（着色）、耗时、大小与相对时间；网络错误与取消单独标出。 */
+/**
+ * 记录按天分组，日期标题吸顶：翻很久以前的记录时始终知道自己在哪一天。
+ *
+ * @param singleOperation 列表只含一个接口的记录；此时每行不再重复方法与路径。
+ */
 @Composable
-private fun HistoryRow(
-    summary: HistorySummary,
-    selected: Boolean,
-    onClick: () -> Unit,
+private fun HistoryList(
+    entries: ImmutableList<HistorySummary>,
+    selected: HistoryEntryId?,
+    singleOperation: Boolean,
+    onOpen: (HistoryEntryId) -> Unit,
+    topPadding: Dp,
+    modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
-    ListItem(
-        onClick = onClick,
-        selected = selected,
-        leadingContent = { MethodBadge(summary.operation.method) },
-        content = {
-            Text(
-                summary.operation.path,
-                style = MaterialTheme.typography.codeMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        },
-        supportingContent = {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(RowSpacing), itemVerticalAlignment = Alignment.CenterVertically) {
-                when (summary.outcome) {
-                    OutcomeKind.RECEIVED -> {
-                        summary.statusCode?.let { StatusBadge(it) }
-                    }
-
-                    OutcomeKind.FAILED -> {
-                        Text(
-                            stringResource(R.string.history_failed),
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.labelMedium,
-                        )
-                    }
-
-                    OutcomeKind.CANCELLED -> {
-                        Text(stringResource(R.string.history_cancelled), style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-                Text(formatDuration(summary.duration), style = MaterialTheme.typography.bodySmall)
-                summary.size?.let { Text(formatFileSize(context, it), style = MaterialTheme.typography.bodySmall) }
-                Text(relativeTime(summary.sentAt), style = MaterialTheme.typography.bodySmall)
+    val zone = remember { ZoneId.systemDefault() }
+    val days = remember(entries, zone) { entries.groupBy { it.sentAt.atZone(zone).toLocalDate() } }
+    LazyColumn(
+        modifier = modifier,
+        contentPadding = PaddingValues(top = topPadding, bottom = ListBottomPadding),
+        verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
+    ) {
+        days.forEach { (day, summaries) ->
+            stickyHeader(key = day.toEpochDay()) { DayHeader(day) }
+            itemsIndexed(summaries, key = { _, summary -> summary.id.value }) { index, summary ->
+                HistoryRow(
+                    summary = summary,
+                    shapes = ListItemDefaults.segmentedShapes(index, summaries.size),
+                    selected = summary.id == selected,
+                    singleOperation = singleOperation,
+                    onClick = { onOpen(summary.id) },
+                    modifier = Modifier.animateItem().padding(horizontal = ScreenPadding),
+                )
             }
-        },
-        colors = ListItemDefaults.colors(),
+        }
+    }
+}
+
+@Composable
+private fun DayHeader(
+    day: LocalDate,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text = dayLabel(day),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.screen)
+                .padding(horizontal = DayHeaderPaddingHorizontal, vertical = DayHeaderPaddingVertical),
+        style = MaterialTheme.typography.titleSmallEmphasized,
+        color = MaterialTheme.colorScheme.primary,
     )
 }
 
-/** "请求记录"；按接口筛选时在下方注明接口。 */
+/**
+ * 一条记录。
+ *
+ * 全部接口的列表里：方法徽章、路径，下面是时刻、耗时与大小，行尾是结果。
+ * 只看一个接口时方法与路径每行都一样，改为结果在前、时刻作标题，一眼扫过去看的就是"哪次成功、哪次失败"。
+ */
 @Composable
-private fun HistoryTitle(operation: OperationKey?) {
-    Column {
-        Text(stringResource(R.string.history_title))
-        operation?.let {
+private fun HistoryRow(
+    summary: HistorySummary,
+    shapes: ListItemShapes,
+    selected: Boolean,
+    singleOperation: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val time = formatTime(summary.sentAt)
+    val facts =
+        listOfNotNull(
+            time.takeUnless { singleOperation },
+            formatDuration(summary.duration),
+            summary.size?.let { formatFileSize(context, it) },
+        ).joinToString(stringResource(R.string.spec_info_separator))
+    SegmentedListItem(
+        selected = selected,
+        onClick = onClick,
+        shapes = shapes,
+        modifier = modifier,
+        leadingContent = {
+            if (singleOperation) {
+                Box(Modifier.widthIn(min = OutcomeSlotWidth), contentAlignment = Alignment.Center) { OutcomeMark(summary) }
+            } else {
+                MethodBadge(summary.operation.method)
+            }
+        },
+        content = {
             Text(
-                "${it.method} ${it.path}",
+                text = if (singleOperation) time else summary.operation.path,
                 style = MaterialTheme.typography.codeMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+        },
+        supportingContent = { Text(facts, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        trailingContent = if (singleOperation) null else ({ OutcomeMark(summary) }),
+        colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.card),
+    )
+}
+
+/** 行尾的结果：状态码徽章，或"失败" / "已取消"。 */
+@Composable
+private fun OutcomeMark(summary: HistorySummary) {
+    when (summary.outcome) {
+        OutcomeKind.RECEIVED -> {
+            summary.statusCode?.let { StatusBadge(it) }
+        }
+
+        OutcomeKind.FAILED -> {
+            Text(
+                stringResource(R.string.history_failed),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
+
+        OutcomeKind.CANCELLED -> {
+            Text(
+                stringResource(R.string.history_cancelled),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelLarge,
+            )
         }
     }
+}
+
+@Composable
+private fun OperationSubtitle(operation: OperationKey) {
+    Text(
+        "${operation.method} ${operation.path}",
+        style = MaterialTheme.typography.codeSmall,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 /** 记录详情（PRD 7.2）：与"响应" Tab 相同，可重放与恢复到当前参数。 */
@@ -230,6 +329,7 @@ fun HistoryEntryScreen(
         remember(viewModel) { ResponseDetailActions(viewModel::toggle, viewModel::setQuery, viewModel::setDisplay, viewModel::saveBody) }
     Scaffold(
         modifier = modifier,
+        containerColor = MaterialTheme.colorScheme.screen,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
@@ -239,6 +339,7 @@ fun HistoryEntryScreen(
                         BackButton(onClick = onBack)
                     }
                 },
+                colors = screenTopAppBarColors(),
             )
         },
     ) { innerPadding ->
@@ -257,22 +358,18 @@ fun HistoryEntryScreen(
 
                 else -> {
                     if (state.sending) SendingBanner(onCancel = viewModel::cancel)
-                    FlowRow(
-                        modifier = Modifier.padding(horizontal = ChipPadding),
-                        horizontalArrangement = Arrangement.spacedBy(RowSpacing),
-                    ) {
-                        ActionChip(R.drawable.ic_replay, R.string.response_replay, enabled = !state.sending, onClick = viewModel::replay)
-                        ActionChip(
-                            icon = R.drawable.ic_undo,
-                            label = R.string.response_restore,
+                    ResponseDetailContent(detail, actions, Modifier.weight(1f)) {
+                        ReplayButton(enabled = !state.sending, onClick = viewModel::replay)
+                        IconButton(
                             onClick = {
                                 viewModel.restore()
                                 scope.launch { snackbar.showSnackbar(restoredMessage) }
                             },
                             enabled = detail.entry.input != null,
-                        )
+                        ) {
+                            Icon(painterResource(R.drawable.ic_undo), contentDescription = stringResource(R.string.response_restore))
+                        }
                     }
-                    ResponseDetailContent(detail, actions, Modifier.weight(1f))
                 }
             }
         }
@@ -289,4 +386,7 @@ fun NoHistoryEntrySelectedPane(modifier: Modifier = Modifier) {
 }
 
 private val RowSpacing = 8.dp
-private val ChipPadding = 16.dp
+private val DayHeaderPaddingHorizontal = 24.dp
+private val DayHeaderPaddingVertical = 8.dp
+private val OutcomeSlotWidth = 48.dp
+private val ListBottomPadding = 24.dp

@@ -19,10 +19,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import kotlinx.collections.immutable.toImmutableList
 import work.foofish.apinspector.R
 import work.foofish.apinspector.settings.ProxyConfig
 import work.foofish.apinspector.settings.ProxyType
-import work.foofish.apinspector.ui.component.SegmentedLabel
+import work.foofish.apinspector.ui.component.ChoiceGroup
+import work.foofish.apinspector.ui.component.FieldShape
+import work.foofish.apinspector.ui.component.fieldColors
 import work.foofish.apinspector.ui.component.rememberSyncedTextFieldState
 import work.foofish.apinspector.ui.theme.codeMedium
 
@@ -34,16 +37,14 @@ fun ProxyConfigEditor(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(FieldSpacing)) {
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            ProxyType.entries.forEachIndexed { index, type ->
-                SegmentedButton(
-                    selected = config.type == type,
-                    onClick = { onChange(config.copy(type = type)) },
-                    shape = SegmentedButtonDefaults.itemShape(index, ProxyType.entries.size),
-                    label = { SegmentedLabel(stringResource(if (type == ProxyType.HTTP) R.string.proxy_http else R.string.proxy_socks5)) },
-                )
-            }
-        }
+        ChoiceGroup(
+            options = ProxyTypes,
+            selected = config.type,
+            onSelect = { onChange(config.copy(type = it)) },
+            label = { stringResource(if (it == ProxyType.HTTP) R.string.proxy_http else R.string.proxy_socks5) },
+            modifier = Modifier.fillMaxWidth(),
+            fill = true,
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(FieldSpacing)) {
             SettingTextField(config.host, {
                 onChange(config.copy(host = it.trim()))
@@ -79,6 +80,8 @@ fun SettingTextField(
     code: Boolean = false,
 ) {
     OutlinedTextField(
+        shape = FieldShape,
+        colors = fieldColors(),
         state = rememberSyncedTextFieldState(value, onValueChange),
         modifier = modifier,
         label = { Text(label) },
@@ -98,6 +101,8 @@ fun SecretField(
     modifier: Modifier = Modifier,
 ) {
     OutlinedSecureTextField(
+        shape = FieldShape,
+        colors = fieldColors(),
         state = rememberSyncedTextFieldState(value, onValueChange),
         modifier = modifier,
         label = { Text(label) },
@@ -128,6 +133,8 @@ fun NumberField(
     val current = state.text.toString()
     val invalid = current.isNotEmpty() && current.toLongOrNull()?.let { it in range } != true
     OutlinedTextField(
+        shape = FieldShape,
+        colors = fieldColors(),
         state = state,
         modifier = modifier,
         label = { Text(label) },
@@ -140,4 +147,5 @@ fun NumberField(
 
 internal val FieldSpacing = 8.dp
 private const val HOST_WEIGHT = 2f
+private val ProxyTypes = ProxyType.entries.toImmutableList()
 private val PORT_RANGE = 1L..65_535L

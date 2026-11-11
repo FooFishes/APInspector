@@ -1,12 +1,14 @@
 package work.foofish.apinspector.response.ui
 
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import work.foofish.apinspector.ui.theme.codeLabel
 
@@ -17,17 +19,19 @@ fun StatusBadge(
     modifier: Modifier = Modifier,
 ) {
     val (container, content) = statusColors(code)
-    Surface(modifier = modifier, color = container, contentColor = content, shape = MaterialTheme.shapes.small) {
+    Surface(modifier = modifier, color = container, contentColor = content, shape = CircleShape) {
         Text(
             code.toString(),
             modifier = Modifier.padding(horizontal = BadgePaddingHorizontal, vertical = BadgePaddingVertical),
             style = MaterialTheme.typography.codeLabel,
+            fontWeight = FontWeight.Bold,
         )
     }
 }
 
+/** 状态码所属类别的容器色与其上的内容色。 */
 @Composable
-private fun statusColors(code: Int): Pair<Color, Color> {
+internal fun statusColors(code: Int): Pair<Color, Color> {
     val colors = MaterialTheme.colorScheme
     return when (code / STATUS_CLASS) {
         SUCCESS -> colors.tertiaryContainer to colors.onTertiaryContainer

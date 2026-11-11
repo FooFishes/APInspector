@@ -15,8 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButtonMenu
@@ -25,10 +25,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.LinearWavyProgressIndicator
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.ListItemShapes
+import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -38,6 +40,7 @@ import androidx.compose.material3.ToggleFloatingActionButton
 import androidx.compose.material3.ToggleFloatingActionButtonDefaults.animateIcon
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
+import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,12 +52,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
@@ -75,11 +78,13 @@ import work.foofish.apinspector.ui.component.EmptyState
 import work.foofish.apinspector.ui.component.FailureDialog
 import work.foofish.apinspector.ui.component.LoadingState
 import work.foofish.apinspector.ui.component.SearchField
-import work.foofish.apinspector.ui.component.SegmentGap
 import work.foofish.apinspector.ui.component.WarningsSheet
-import work.foofish.apinspector.ui.component.segmentedShape
 import work.foofish.apinspector.ui.text.relativeTime
 import work.foofish.apinspector.ui.theme.APInspectorTheme
+import work.foofish.apinspector.ui.theme.ScreenPadding
+import work.foofish.apinspector.ui.theme.card
+import work.foofish.apinspector.ui.theme.screen
+import work.foofish.apinspector.ui.theme.screenTopAppBarColors
 import java.time.Instant
 
 @Composable
@@ -135,6 +140,7 @@ private fun HomeContent(
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = { HomeTopBar(state.importStatus == ImportStatus.Importing, scrollBehavior, onOpenSettings) },
+        containerColor = MaterialTheme.colorScheme.screen,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             ImportMenu(
@@ -204,6 +210,7 @@ private fun HomeTopBar(
                     Icon(painterResource(R.drawable.ic_settings), contentDescription = stringResource(R.string.settings_title))
                 }
             },
+            colors = screenTopAppBarColors(),
             scrollBehavior = scrollBehavior,
         )
         if (importing) LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
@@ -332,7 +339,7 @@ private fun SpecList(
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(top = contentPadding.calculateTopPadding(), bottom = ListBottomPadding),
-        verticalArrangement = Arrangement.spacedBy(SegmentGap),
+        verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
     ) {
         item(key = SEARCH_KEY) {
             SearchField(
@@ -345,23 +352,21 @@ private fun SpecList(
             item(key = NO_MATCH_KEY) {
                 Text(
                     text = stringResource(R.string.home_no_match),
-                    modifier = Modifier.fillMaxWidth().padding(ScreenPadding),
+                    modifier = Modifier.fillMaxWidth().padding(NoMatchPadding),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
                 )
             }
         }
         itemsIndexed(specs, key = { _, spec -> spec.id.value }) { index, spec ->
             SpecListItem(
                 spec = spec,
+                shapes = ListItemDefaults.segmentedShapes(index, specs.size),
                 onClick = { onOpenSpec(spec.id) },
                 onPinChange = { onPinChange(spec.id, it) },
                 onRequestDelete = { onRequestDelete(spec) },
-                modifier =
-                    Modifier
-                        .animateItem()
-                        .padding(horizontal = ScreenPadding)
-                        .clip(segmentedShape(index, specs.size)),
+                modifier = Modifier.animateItem().padding(horizontal = ScreenPadding),
             )
         }
     }
@@ -370,14 +375,20 @@ private fun SpecList(
 @Composable
 private fun SpecListItem(
     spec: SpecSummary,
+    shapes: ListItemShapes,
     onClick: () -> Unit,
     onPinChange: (Boolean) -> Unit,
     onRequestDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    ListItem(
+    // 长按与「更多」按钮打开同一个菜单。
+    var menuExpanded by remember { mutableStateOf(false) }
+    SegmentedListItem(
         onClick = onClick,
+        shapes = shapes,
         modifier = modifier,
+        onLongClick = { menuExpanded = true },
+        onLongClickLabel = stringResource(R.string.action_more),
         leadingContent = { OriginIcon(spec.origin) },
         supportingContent = { Text(spec.describe(), maxLines = 2, overflow = TextOverflow.Ellipsis) },
         trailingContent = {
@@ -390,12 +401,18 @@ private fun SpecListItem(
                         tint = MaterialTheme.colorScheme.primary,
                     )
                 }
-                SpecMenu(pinned = spec.pinned, onPinChange = onPinChange, onRequestDelete = onRequestDelete)
+                SpecMenu(
+                    expanded = menuExpanded,
+                    onExpandedChange = { menuExpanded = it },
+                    pinned = spec.pinned,
+                    onPinChange = onPinChange,
+                    onRequestDelete = onRequestDelete,
+                )
             }
         },
-        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.card),
     ) {
-        Text(spec.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(spec.title, style = MaterialTheme.typography.titleMediumEmphasized, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -411,26 +428,35 @@ private fun OriginIcon(
             SpecOrigin.Pasted -> R.drawable.ic_content_paste
         }
     Box(
-        modifier = modifier.size(OriginIconContainerSize).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
+        modifier =
+            modifier
+                .size(OriginIconContainerSize)
+                .background(MaterialTheme.colorScheme.primaryContainer, MaterialShapes.Cookie6Sided.toShape()),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(painterResource(icon), contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+        Icon(
+            painterResource(icon),
+            contentDescription = null,
+            modifier = Modifier.size(OriginIconSize),
+            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+        )
     }
 }
 
 @Composable
 private fun SpecMenu(
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
     pinned: Boolean,
     onPinChange: (Boolean) -> Unit,
     onRequestDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var expanded by remember { mutableStateOf(false) }
     Box(modifier = modifier) {
-        IconButton(onClick = { expanded = true }) {
+        IconButton(onClick = { onExpandedChange(true) }) {
             Icon(painterResource(R.drawable.ic_more_vert), contentDescription = stringResource(R.string.action_more))
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        DropdownMenu(expanded = expanded, onDismissRequest = { onExpandedChange(false) }, shape = MaterialTheme.shapes.large) {
             DropdownMenuItem(
                 text = { Text(stringResource(if (pinned) R.string.home_unpin else R.string.home_pin)) },
                 leadingIcon = {
@@ -440,7 +466,7 @@ private fun SpecMenu(
                     )
                 },
                 onClick = {
-                    expanded = false
+                    onExpandedChange(false)
                     onPinChange(!pinned)
                 },
             )
@@ -448,7 +474,7 @@ private fun SpecMenu(
                 text = { Text(stringResource(R.string.action_delete)) },
                 leadingIcon = { Icon(painterResource(R.drawable.ic_delete), contentDescription = null) },
                 onClick = {
-                    expanded = false
+                    onExpandedChange(false)
                     onRequestDelete()
                 },
             )
@@ -492,10 +518,14 @@ private fun DeleteSpecDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         modifier = modifier,
-        icon = { Icon(painterResource(R.drawable.ic_delete), contentDescription = null) },
+        icon = { Icon(painterResource(R.drawable.ic_delete), contentDescription = null, tint = MaterialTheme.colorScheme.error) },
         title = { Text(stringResource(R.string.home_delete_title, spec.title)) },
         text = { Text(stringResource(R.string.home_delete_body)) },
-        confirmButton = { TextButton(onClick = onConfirm) { Text(stringResource(R.string.action_delete)) } },
+        confirmButton = {
+            TextButton(onClick = onConfirm, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
+                Text(stringResource(R.string.action_delete))
+            }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
     )
 }
@@ -538,11 +568,12 @@ private val SPEC_MIME_TYPES =
 private const val SEARCH_KEY = "search"
 private const val NO_MATCH_KEY = "no-match"
 private const val HALF_PROGRESS = 0.5f
-private val ScreenPadding = 16.dp
-private val SearchSpacing = 8.dp
+private val NoMatchPadding = 32.dp
+private val SearchSpacing = 12.dp
 private val ListBottomPadding = 96.dp
 private val PinIconSize = 18.dp
-private val OriginIconContainerSize = 40.dp
+private val OriginIconContainerSize = 44.dp
+private val OriginIconSize = 22.dp
 
 @PreviewLightDark
 @Composable

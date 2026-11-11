@@ -2,26 +2,33 @@ package work.foofish.apinspector.operations
 
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.LinearWavyProgressIndicator
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.ListItemShapes
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MediumFlexibleTopAppBar
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedListItem
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
@@ -34,9 +41,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -54,11 +63,13 @@ import work.foofish.apinspector.ui.component.FailureDialog
 import work.foofish.apinspector.ui.component.LoadingState
 import work.foofish.apinspector.ui.component.MethodBadge
 import work.foofish.apinspector.ui.component.SearchField
-import work.foofish.apinspector.ui.component.SegmentGap
 import work.foofish.apinspector.ui.component.WarningsSheet
-import work.foofish.apinspector.ui.component.segmentedShape
 import work.foofish.apinspector.ui.text.message
+import work.foofish.apinspector.ui.theme.ScreenPadding
+import work.foofish.apinspector.ui.theme.card
 import work.foofish.apinspector.ui.theme.codeMedium
+import work.foofish.apinspector.ui.theme.screen
+import work.foofish.apinspector.ui.theme.screenTopAppBarColors
 
 /**
  * 一份 API 文档的接口列表。
@@ -143,6 +154,7 @@ private fun OperationListContent(
     var warningsToShow by remember { mutableStateOf<ImmutableList<ParseWarning>?>(null) }
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = MaterialTheme.colorScheme.screen,
         topBar = {
             OperationListTopBar(
                 state = state,
@@ -200,9 +212,10 @@ private fun OperationListTopBar(
 ) {
     val onOpenDrawer = actions.onOpenDrawer
     Column(modifier = modifier) {
-        MediumFlexibleTopAppBar(
+        // 小号顶栏：标题一行放不下时截断，把首屏留给接口列表。
+        TopAppBar(
             title = { Text(state.spec?.title.orEmpty(), maxLines = 1, overflow = TextOverflow.Ellipsis) },
-            subtitle = { state.spec?.let { Text(it.subtitle()) } },
+            subtitle = { state.spec?.let { Text(it.subtitle(), maxLines = 1, overflow = TextOverflow.Ellipsis) } },
             navigationIcon = {
                 if (onOpenDrawer != null) {
                     IconButton(onClick = onOpenDrawer) {
@@ -228,6 +241,7 @@ private fun OperationListTopBar(
                     }
                 }
             },
+            colors = screenTopAppBarColors(),
             scrollBehavior = scrollBehavior,
         )
         if (state.content is OperationListContent.Loaded) {
@@ -236,7 +250,7 @@ private fun OperationListTopBar(
                 current = state.environment,
                 onSelect = actions.onSelectEnvironment,
                 onManage = actions.onManageEnvironments,
-                modifier = Modifier.padding(horizontal = ScreenPadding),
+                modifier = Modifier.padding(horizontal = ScreenPadding).padding(bottom = SectionSpacing),
             )
         }
         if (state.refresh == RefreshStatus.Fetching || state.refresh == RefreshStatus.Applying) {
@@ -270,7 +284,7 @@ private fun OperationList(
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(top = contentPadding.calculateTopPadding(), bottom = ListBottomPadding),
-        verticalArrangement = Arrangement.spacedBy(SegmentGap),
+        verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
     ) {
         item(key = SEARCH_KEY) {
             SearchField(
@@ -283,9 +297,10 @@ private fun OperationList(
             item(key = NO_MATCH_KEY) {
                 Text(
                     text = stringResource(R.string.operations_no_match),
-                    modifier = Modifier.fillMaxWidth().padding(ScreenPadding),
+                    modifier = Modifier.fillMaxWidth().padding(NoMatchPadding),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
                 )
             }
         }
@@ -303,21 +318,19 @@ private fun LazyListScope.section(
     onOpenOperation: (OperationKey) -> Unit,
 ) {
     val sectionKey = section.id.lazyKey()
-    item(key = sectionKey) {
-        SectionHeader(section = section, onToggle = { onToggleSection(section.id) }, modifier = Modifier.animateItem())
+    // 分组标题吸顶：长分组里滚动时始终知道自己在哪个 tag 下，也随时可以折叠它。
+    stickyHeader(key = sectionKey) {
+        SectionHeader(section = section, onToggle = { onToggleSection(section.id) })
     }
     if (section.collapsed) return
     itemsIndexed(section.operations, key = { _, row -> "$sectionKey ${row.key}" }) { index, row ->
         OperationListItem(
             row = row,
+            shapes = ListItemDefaults.segmentedShapes(index, section.operations.size),
             selected = row.key == selected,
             onClick = { onOpenOperation(row.key) },
             onSetFavorite = { onSetFavorite(row.key, it) },
-            modifier =
-                Modifier
-                    .animateItem()
-                    .padding(horizontal = ScreenPadding)
-                    .clip(segmentedShape(index, section.operations.size)),
+            modifier = Modifier.animateItem().padding(horizontal = ScreenPadding),
         )
     }
 }
@@ -329,23 +342,61 @@ private fun SectionHeader(
     modifier: Modifier = Modifier,
 ) {
     val rotation by animateFloatAsState(if (section.collapsed) COLLAPSED_ROTATION else 0f, label = "section-chevron")
-    ListItem(
-        onClick = onToggle,
-        modifier = modifier.padding(top = SectionSpacing),
-        supportingContent = section.tag?.description?.let { { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
-        trailingContent = {
-            Icon(
-                painter = painterResource(R.drawable.ic_expand_more),
-                contentDescription = stringResource(if (section.collapsed) R.string.action_expand else R.string.action_collapse),
-                modifier = Modifier.rotate(rotation),
-            )
-        },
-        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+    Row(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.screen)
+                .padding(horizontal = HeaderInset, vertical = HeaderVerticalPadding)
+                .clip(CircleShape)
+                .clickable(onClick = onToggle)
+                .padding(horizontal = HeaderContentPadding, vertical = HeaderContentPaddingVertical),
+        horizontalArrangement = Arrangement.spacedBy(HeaderSpacing),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "${section.title()}  ${section.operations.size}",
+            text = section.title(),
             style = MaterialTheme.typography.titleMediumEmphasized,
-            color = MaterialTheme.colorScheme.primary,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        CountPill(section.operations.size)
+        section.tag?.description?.let {
+            Text(
+                text = it,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        } ?: Box(Modifier.weight(1f))
+        Icon(
+            painter = painterResource(R.drawable.ic_expand_more),
+            contentDescription = stringResource(if (section.collapsed) R.string.action_expand else R.string.action_collapse),
+            modifier = Modifier.rotate(rotation),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** 分组内的接口数。 */
+@Composable
+private fun CountPill(
+    count: Int,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+    ) {
+        Text(
+            text = count.toString(),
+            modifier = Modifier.padding(horizontal = PillPaddingHorizontal, vertical = PillPaddingVertical),
+            style = MaterialTheme.typography.labelMedium,
         )
     }
 }
@@ -353,16 +404,22 @@ private fun SectionHeader(
 @Composable
 private fun OperationListItem(
     row: OperationRow,
+    shapes: ListItemShapes,
     selected: Boolean,
     onClick: () -> Unit,
     onSetFavorite: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    ListItem(
+    // 组件的两行高度固定为 72dp；这里收紧到 64dp（随字体缩放放大），一屏多看一两个接口。
+    val maxHeight = ItemHeight * LocalDensity.current.fontScale.coerceAtLeast(1f)
+    SegmentedListItem(
+        selected = selected,
         onClick = onClick,
-        modifier = modifier,
+        shapes = shapes,
+        modifier = modifier.heightIn(max = maxHeight),
         leadingContent = { MethodBadge(row.key.method) },
-        supportingContent = row.summary?.let { { Text(it, maxLines = 2, overflow = TextOverflow.Ellipsis) } },
+        verticalAlignment = Alignment.CenterVertically,
+        supportingContent = row.summary?.let { { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
         trailingContent = {
             IconToggleButton(checked = row.favorite, onCheckedChange = onSetFavorite) {
                 Icon(
@@ -371,11 +428,8 @@ private fun OperationListItem(
                 )
             }
         },
-        colors =
-            ListItemDefaults.colors(
-                containerColor =
-                    with(MaterialTheme.colorScheme) { if (selected) secondaryContainer else surfaceContainerLow },
-            ),
+        colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.card),
+        contentPadding = PaddingValues(horizontal = ItemPaddingHorizontal, vertical = ItemPaddingVertical),
     ) {
         Text(
             text = row.key.path,
@@ -434,6 +488,16 @@ fun NoOperationSelectedPane(modifier: Modifier = Modifier) {
 private const val SEARCH_KEY = "search"
 private const val NO_MATCH_KEY = "no-match"
 private const val COLLAPSED_ROTATION = -90f
-private val ScreenPadding = 16.dp
+private val NoMatchPadding = 32.dp
 private val SectionSpacing = 8.dp
+private val HeaderInset = 8.dp
+private val HeaderVerticalPadding = 4.dp
+private val HeaderContentPadding = 12.dp
+private val HeaderContentPaddingVertical = 8.dp
+private val ItemPaddingHorizontal = 16.dp
+private val ItemPaddingVertical = 4.dp
+private val ItemHeight = 64.dp
+private val HeaderSpacing = 8.dp
+private val PillPaddingHorizontal = 8.dp
+private val PillPaddingVertical = 2.dp
 private val ListBottomPadding = 24.dp

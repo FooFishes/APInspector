@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.DrawerState
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
@@ -12,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -43,12 +45,13 @@ fun SpecDrawer(
                 Text(
                     text = stringResource(R.string.operations_switch_spec),
                     modifier = Modifier.padding(DrawerPadding),
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleLargeEmphasized,
                 )
                 LazyColumn {
                     items(specs, key = { it.id.value }) { spec ->
                         NavigationDrawerItem(
                             label = { Text(spec.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            icon = { Icon(painterResource(R.drawable.ic_api), contentDescription = null) },
                             selected = spec.id == selected,
                             onClick = { onSelect(spec.id) },
                             modifier = Modifier.padding(horizontal = ItemPadding),

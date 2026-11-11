@@ -1,5 +1,6 @@
 package work.foofish.apinspector.request.ui
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -29,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import work.foofish.apinspector.R
 import work.foofish.apinspector.openapi.request.BodyInput
 import work.foofish.apinspector.openapi.request.Field
@@ -43,7 +46,9 @@ import work.foofish.apinspector.request.BodyEditor
 import work.foofish.apinspector.request.BodyMode
 import work.foofish.apinspector.request.FileTarget
 import work.foofish.apinspector.request.body.FieldSchema
-import work.foofish.apinspector.ui.component.SegmentedLabel
+import work.foofish.apinspector.ui.component.ChoiceGroup
+import work.foofish.apinspector.ui.component.FieldShape
+import work.foofish.apinspector.ui.component.fieldColors
 import work.foofish.apinspector.ui.component.rememberSyncedTextFieldState
 import work.foofish.apinspector.ui.text.formatFileSize
 import work.foofish.apinspector.ui.text.label
@@ -57,7 +62,8 @@ internal fun ContentTypeSelector(
     modifier: Modifier = Modifier,
 ) {
     if (editor.contentTypes.size == 1 && !editor.optional) return
-    FlowRow(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(FieldSpacing)) {
+    // 单行横向滚动：content type 往往很长，折行会把编辑器挤到屏幕外。
+    Row(modifier = modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(FieldSpacing)) {
         if (editor.optional) {
             FilterChip(
                 selected = editor.selected == null,
@@ -83,17 +89,14 @@ internal fun BodyModeSwitch(
     onModeChange: (BodyMode) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    SingleChoiceSegmentedButtonRow(modifier = modifier) {
-        BodyMode.entries.forEachIndexed { index, entry ->
-            SegmentedButton(
-                selected = mode == entry,
-                onClick = { onModeChange(entry) },
-                shape = SegmentedButtonDefaults.itemShape(index, BodyMode.entries.size),
-                enabled = entry == BodyMode.RAW || visualEnabled,
-                label = { SegmentedLabel(stringResource(entry.label())) },
-            )
-        }
-    }
+    ChoiceGroup(
+        options = BodyModes,
+        selected = mode,
+        onSelect = onModeChange,
+        label = { stringResource(it.label()) },
+        modifier = modifier,
+        isEnabled = { it == BodyMode.RAW || visualEnabled },
+    )
 }
 
 /** JSON 原文：等宽文本编辑器，下方显示语法错误（只提示，不阻止发送）。 */
@@ -133,8 +136,10 @@ internal fun RawTextField(
 ) {
     val state = rememberSyncedTextFieldState(value, onValueChange)
     OutlinedTextField(
+        shape = FieldShape,
+        colors = fieldColors(),
         state = state,
-        modifier = modifier.fillMaxWidth().heightIn(min = RawEditorMinHeight),
+        modifier = modifier.fillMaxWidth().heightIn(min = RawEditorMinHeight, max = RawEditorMaxHeight),
         textStyle = MaterialTheme.typography.codeMedium,
         lineLimits = TextFieldLineLimits.MultiLine(),
         isError = isError,
@@ -245,16 +250,12 @@ private fun PartTypeSwitch(
     file: Boolean,
     onChange: (Boolean) -> Unit,
 ) {
-    SingleChoiceSegmentedButtonRow {
-        listOf(false, true).forEachIndexed { index, isFile ->
-            SegmentedButton(
-                selected = file == isFile,
-                onClick = { onChange(isFile) },
-                shape = SegmentedButtonDefaults.itemShape(index, 2),
-                label = { SegmentedLabel(stringResource(if (isFile) R.string.request_part_file else R.string.request_part_text)) },
-            )
-        }
-    }
+    ChoiceGroup(
+        options = PartTypes,
+        selected = file,
+        onSelect = onChange,
+        label = { isFile -> stringResource(if (isFile) R.string.request_part_file else R.string.request_part_text) },
+    )
 }
 
 /** 选择本机文件；显示已选文件的名称与大小。 */
@@ -303,4 +304,11 @@ private fun <T> List<T>.replace(
     value: T,
 ): List<T> = mapIndexed { i, old -> if (i == index) value else old }
 
-private val RawEditorMinHeight = 160.dp
+private val RawEditorMinHeight = 120.dp
+
+/** 原文再长，输入框也只占半屏左右，在框内滚动：框外的参数与"发送"始终够得着。 */
+private val RawEditorMaxHeight = 320.dp
+private val BodyModes = BodyMode.entries.toImmutableList()
+
+/** multipart 字段的两种值：文本（`false`）与文件（`true`）。 */
+private val PartTypes = persistentListOf(false, true)

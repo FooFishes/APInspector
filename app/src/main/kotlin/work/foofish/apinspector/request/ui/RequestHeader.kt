@@ -2,10 +2,13 @@ package work.foofish.apinspector.request.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.ChipColors
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -20,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import kotlinx.collections.immutable.ImmutableList
@@ -33,6 +37,7 @@ import work.foofish.apinspector.request.RequestHeaderActions
 import work.foofish.apinspector.request.RequestUiState
 import work.foofish.apinspector.ui.component.ConfirmDialog
 import work.foofish.apinspector.ui.component.TextInputDialog
+import work.foofish.apinspector.ui.theme.card
 
 /** "请求" Tab 顶部：环境与预设选择、预设操作（PRD 4.1、5）。 */
 @Composable
@@ -49,10 +54,19 @@ internal fun RequestHeader(
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
         EnvironmentSelector(state.environments, state.environment, actions::selectEnvironment, onManageEnvironments)
-        PresetSelector(state.presets) { id ->
-            if (state.presets.current != null && state.presets.modified) dialog = PresetDialog.ConfirmLoad(id) else actions.loadPreset(id)
-        }
-        PresetMenu(state.presets) { dialog = it }
+        PresetSelector(
+            state = state.presets,
+            onLoad = { id ->
+                if (state.presets.current != null &&
+                    state.presets.modified
+                ) {
+                    dialog = PresetDialog.ConfirmLoad(id)
+                } else {
+                    actions.loadPreset(id)
+                }
+            },
+            onDialog = { dialog = it },
+        )
     }
     PresetDialogs(dialog, state.presets, actions) { dialog = null }
 }
@@ -69,7 +83,7 @@ internal fun EnvironmentSelector(
     var expanded by remember { mutableStateOf(false) }
     Box(modifier) {
         EnvironmentChip(current, onClick = { expanded = true })
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, shape = MaterialTheme.shapes.large) {
             environments.forEach { environment ->
                 EnvironmentMenuItem(
                     environment = environment,
@@ -116,16 +130,14 @@ private fun EnvironmentChip(
                 modifier = Modifier.size(AssistChipDefaults.IconSize),
             )
         },
+        shape = CircleShape,
         colors =
             if (insecure) {
-                AssistChipDefaults.assistChipColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                    labelColor = MaterialTheme.colorScheme.onErrorContainer,
-                    leadingIconContentColor = MaterialTheme.colorScheme.onErrorContainer,
-                )
+                tonalChipColors(MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
             } else {
-                AssistChipDefaults.assistChipColors()
+                tonalChipColors(MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer)
             },
+        border = null,
     )
 }
 
@@ -161,18 +173,34 @@ private fun EnvironmentMenuItem(
     )
 }
 
-/** 预设选择：显示当前参数来自哪个预设、是否已修改（PRD 4.1）。 */
+/** 填充色的胶囊：页面底色上不描边，靠色调与周围区分。 */
+@Composable
+private fun tonalChipColors(
+    container: Color,
+    content: Color,
+): ChipColors =
+    AssistChipDefaults.assistChipColors(
+        containerColor = container,
+        labelColor = content,
+        leadingIconContentColor = content,
+        trailingIconContentColor = content,
+    )
+
+/**
+ * 预设（PRD 4.1）：显示当前参数来自哪个预设、是否已修改；
+ * 点开后上半部分选择要加载的预设，下半部分是对当前参数与预设的操作。
+ */
 @Composable
 private fun PresetSelector(
     state: PresetState,
     onLoad: (PresetId) -> Unit,
+    onDialog: (PresetDialog) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
         val name = state.current?.name ?: stringResource(R.string.preset_none)
         AssistChip(
             onClick = { expanded = true },
-            enabled = state.presets.isNotEmpty(),
             label = { Text(if (state.modified) stringResource(R.string.preset_modified, name) else name) },
             leadingIcon = {
                 Icon(
@@ -181,8 +209,18 @@ private fun PresetSelector(
                     modifier = Modifier.size(AssistChipDefaults.IconSize),
                 )
             },
+            trailingIcon = {
+                Icon(
+                    painterResource(R.drawable.ic_arrow_drop_down),
+                    contentDescription = null,
+                    modifier = Modifier.size(AssistChipDefaults.IconSize),
+                )
+            },
+            shape = CircleShape,
+            colors = tonalChipColors(MaterialTheme.colorScheme.card, MaterialTheme.colorScheme.onSurface),
+            border = null,
         )
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, shape = MaterialTheme.shapes.large) {
             state.presets.forEach { preset ->
                 DropdownMenuItem(
                     text = { Text(preset.name) },
@@ -200,63 +238,45 @@ private fun PresetSelector(
                         },
                 )
             }
+            if (state.presets.isNotEmpty()) HorizontalDivider()
+            PresetActions(state) {
+                expanded = false
+                onDialog(it)
+            }
         }
     }
 }
 
+/** 对当前参数与当前预设的操作；没有当前预设时，只针对预设的操作不显示。 */
 @Composable
-private fun PresetMenu(
+private fun ColumnScope.PresetActions(
     state: PresetState,
     onDialog: (PresetDialog) -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        IconButton(onClick = { expanded = true }) {
-            Icon(painterResource(R.drawable.ic_more_vert), contentDescription = stringResource(R.string.action_more))
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            val current = state.current
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.preset_save)) },
-                enabled = current != null && state.modified,
-                onClick = {
-                    expanded = false
-                    current?.let { onDialog(PresetDialog.ConfirmOverwrite(it)) }
-                },
-            )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.preset_save_as)) },
-                onClick = {
-                    expanded = false
-                    onDialog(PresetDialog.SaveAs)
-                },
-            )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.preset_rename)) },
-                enabled = current != null,
-                onClick = {
-                    expanded = false
-                    current?.let { onDialog(PresetDialog.Rename(it)) }
-                },
-            )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.preset_delete)) },
-                enabled = current != null,
-                onClick = {
-                    expanded = false
-                    current?.let { onDialog(PresetDialog.Delete(it)) }
-                },
-            )
-            HorizontalDivider()
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.preset_reset)) },
-                onClick = {
-                    expanded = false
-                    onDialog(PresetDialog.ConfirmReset)
-                },
-            )
-        }
+    val current = state.current
+    if (current != null && state.modified) {
+        PresetAction(R.drawable.ic_check, R.string.preset_save) { onDialog(PresetDialog.ConfirmOverwrite(current)) }
     }
+    PresetAction(R.drawable.ic_add, R.string.preset_save_as) { onDialog(PresetDialog.SaveAs) }
+    if (current != null) {
+        PresetAction(R.drawable.ic_format_align_left, R.string.preset_rename) { onDialog(PresetDialog.Rename(current)) }
+        PresetAction(R.drawable.ic_delete, R.string.preset_delete) { onDialog(PresetDialog.Delete(current)) }
+    }
+    HorizontalDivider()
+    PresetAction(R.drawable.ic_undo, R.string.preset_reset) { onDialog(PresetDialog.ConfirmReset) }
+}
+
+@Composable
+private fun PresetAction(
+    icon: Int,
+    label: Int,
+    onClick: () -> Unit,
+) {
+    DropdownMenuItem(
+        text = { Text(stringResource(label)) },
+        onClick = onClick,
+        leadingIcon = { Icon(painterResource(icon), contentDescription = null) },
+    )
 }
 
 private sealed interface PresetDialog {
@@ -354,12 +374,17 @@ private fun PresetConfirmDialog(
                     stringResource(R.string.preset_save_title, dialog.preset.name),
                     body = null,
                     R.string.preset_save,
-                    actions::saveToPreset,
+                    action = actions::saveToPreset,
                 )
             }
 
             is PresetDialog.Delete -> {
-                Confirmation(stringResource(R.string.preset_delete_title, dialog.preset.name), body = null, R.string.action_delete) {
+                Confirmation(
+                    stringResource(R.string.preset_delete_title, dialog.preset.name),
+                    body = null,
+                    R.string.action_delete,
+                    destructive = true,
+                ) {
                     actions.deletePreset(dialog.preset.id)
                 }
             }
@@ -369,7 +394,7 @@ private fun PresetConfirmDialog(
                     stringResource(R.string.preset_reset_title),
                     stringResource(R.string.preset_reset_body),
                     R.string.preset_reset_confirm,
-                    actions::resetToDefaults,
+                    action = actions::resetToDefaults,
                 )
             }
         }
@@ -382,6 +407,7 @@ private fun PresetConfirmDialog(
             onDismiss()
         },
         onDismiss = onDismiss,
+        destructive = confirmation.destructive,
     )
 }
 
@@ -389,5 +415,6 @@ private class Confirmation(
     val title: String,
     val body: String?,
     val confirmText: Int,
+    val destructive: Boolean = false,
     val action: () -> Unit,
 )

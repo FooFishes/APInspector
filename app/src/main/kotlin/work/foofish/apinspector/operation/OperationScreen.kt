@@ -1,12 +1,14 @@
 package work.foofish.apinspector.operation
 
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
@@ -18,18 +20,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import work.foofish.apinspector.R
 import work.foofish.apinspector.openapi.OperationKey
 import work.foofish.apinspector.ui.component.BackButton
-import work.foofish.apinspector.ui.component.MethodBadge
 import work.foofish.apinspector.ui.component.OperationTitle
-import work.foofish.apinspector.ui.theme.codeMedium
+import work.foofish.apinspector.ui.theme.screen
+import work.foofish.apinspector.ui.theme.screenTopAppBarColors
 
 /** 接口详情的三个 Tab（PRD 3），默认打开"文档"。 */
 private enum class OperationTab(
@@ -60,6 +59,7 @@ fun OperationScreen(
     var tab by rememberSaveable { mutableStateOf(OperationTab.DOC) }
     Scaffold(
         modifier = modifier,
+        containerColor = MaterialTheme.colorScheme.screen,
         topBar = {
             TopAppBar(
                 title = { OperationTitle(operation) },
@@ -68,21 +68,43 @@ fun OperationScreen(
                         BackButton(onClick = onBack)
                     }
                 },
+                colors = screenTopAppBarColors(),
             )
         },
     ) { innerPadding ->
         Column(Modifier.padding(top = innerPadding.calculateTopPadding())) {
-            PrimaryTabRow(selectedTabIndex = tab.ordinal) {
+            PrimaryTabRow(selectedTabIndex = tab.ordinal, containerColor = MaterialTheme.colorScheme.screen) {
                 OperationTab.entries.forEach { entry ->
-                    Tab(selected = tab == entry, onClick = { tab = entry }, text = { Text(stringResource(entry.title)) })
+                    Tab(
+                        selected = tab == entry,
+                        onClick = { tab = entry },
+                        text = { Text(stringResource(entry.title), style = MaterialTheme.typography.titleSmallEmphasized) },
+                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
-            val content = Modifier.weight(1f).fillMaxWidth()
-            when (tab) {
-                OperationTab.DOC -> docTab(content)
-                OperationTab.REQUEST -> requestTab({ tab = OperationTab.RESPONSE }, content)
-                OperationTab.RESPONSE -> responseTab({ tab = OperationTab.REQUEST }, content)
+            val spatial = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
+            val effects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+            AnimatedContent(
+                targetState = tab,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                // 新 Tab 从它所在的一侧滑入一小段，方向与 Tab 的左右顺序一致。
+                transitionSpec = {
+                    val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                    (slideInHorizontally(spatial) { direction * it / SLIDE_FRACTION } + fadeIn(effects)) togetherWith fadeOut(effects)
+                },
+                label = "operation-tab",
+            ) { current ->
+                val content = Modifier.fillMaxSize()
+                when (current) {
+                    OperationTab.DOC -> docTab(content)
+                    OperationTab.REQUEST -> requestTab({ tab = OperationTab.RESPONSE }, content)
+                    OperationTab.RESPONSE -> responseTab({ tab = OperationTab.REQUEST }, content)
+                }
             }
         }
     }
 }
+
+/** 切换 Tab 时内容滑入的距离：宽度的 1 / 8。 */
+private const val SLIDE_FRACTION = 8

@@ -8,6 +8,7 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -90,11 +91,23 @@ sealed interface RequestUiState {
         val groups: ImmutableList<ParameterGroup>,
         val extras: ImmutableList<ExtraParameter>,
         val body: BodyEditor?,
+        val preview: RequestPreview,
         val sending: Boolean,
         val problems: ImmutableList<SendProblem>?,
         val sent: Boolean,
     ) : RequestUiState
 }
+
+/**
+ * 按当前参数与环境组装出的请求预览。
+ *
+ * @property url 实际会发出的 URL；当前无法组装请求时为 `null`。
+ * @property problems 当前阻止发送的原因；可以发送时为空。
+ */
+data class RequestPreview(
+    val url: String?,
+    val problems: ImmutableList<SendProblem>,
+)
 
 /** 文件选择的目标：整个 Body，或 multipart 的第 [index] 个字段。 */
 sealed interface FileTarget {
@@ -211,6 +224,19 @@ class RequestViewModel
                 }
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), RequestUiState.Loading)
 
+        private fun preview(
+            context: EditContext.Ready,
+            input: RequestInput,
+            environment: Environment?,
+        ): RequestPreview {
+            if (environment == null) return RequestPreview(url = null, problems = persistentListOf(SendProblem.NoEnvironment))
+            val assembler = RequestAssembler(context.document, userAgent)
+            return when (val assembly = assembler.assemble(context.operation, input, environment.toRequestEnvironment())) {
+                is Assembly.Ready -> RequestPreview(assembly.request.url, persistentListOf())
+                is Assembly.Blocked -> RequestPreview(url = null, problems = assembly.problems.map(SendProblem::Assembly).toImmutableList())
+            }
+        }
+
         private fun loaded(
             context: EditContext.Ready,
             inputs: EditorInputs,
@@ -240,6 +266,7 @@ class RequestViewModel
                 groups = builder.groups(params.input),
                 extras = params.input.extras.toImmutableList(),
                 body = builder.body(params.input, view.mode, view.collapsed),
+                preview = preview(context, params.input, inputs.current),
                 sending = sending,
                 problems = view.problems,
                 sent = view.sent,

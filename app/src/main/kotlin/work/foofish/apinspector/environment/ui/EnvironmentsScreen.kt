@@ -1,10 +1,12 @@
 package work.foofish.apinspector.environment.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.DropdownMenu
@@ -14,10 +16,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.ListItemShapes
+import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,9 +45,11 @@ import work.foofish.apinspector.ui.component.BackButton
 import work.foofish.apinspector.ui.component.ConfirmDialog
 import work.foofish.apinspector.ui.component.EmptyState
 import work.foofish.apinspector.ui.component.LoadingState
-import work.foofish.apinspector.ui.component.SegmentGap
 import work.foofish.apinspector.ui.component.TextInputDialog
-import work.foofish.apinspector.ui.component.segmentedShape
+import work.foofish.apinspector.ui.theme.ScreenPadding
+import work.foofish.apinspector.ui.theme.card
+import work.foofish.apinspector.ui.theme.screen
+import work.foofish.apinspector.ui.theme.screenTopAppBarColors
 
 /** 环境列表（PRD 5"管理环境"）。 */
 @Composable
@@ -63,8 +71,10 @@ fun EnvironmentsScreen(
                 navigationIcon = {
                     BackButton(onClick = onBack)
                 },
+                colors = screenTopAppBarColors(),
             )
         },
+        containerColor = MaterialTheme.colorScheme.screen,
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { dialog = EnvironmentDialog.Create },
@@ -121,7 +131,7 @@ private fun EnvironmentList(
                 start = ScreenPadding,
                 end = ScreenPadding,
             ),
-        verticalArrangement = Arrangement.spacedBy(SegmentGap),
+        verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
     ) {
         itemsIndexed(environments, key = { _, environment -> environment.id.value }) { index, environment ->
             EnvironmentRow(
@@ -132,7 +142,8 @@ private fun EnvironmentList(
                 onClick = { onOpen(environment.id) },
                 onSelect = { onSelect(environment.id) },
                 onDialog = onDialog,
-                modifier = Modifier.clip(segmentedShape(index, environments.size)),
+                shapes = ListItemDefaults.segmentedShapes(index, environments.size),
+                modifier = Modifier.animateItem(),
             )
         }
     }
@@ -147,6 +158,7 @@ private fun EnvironmentRow(
     onClick: () -> Unit,
     onSelect: () -> Unit,
     onDialog: (EnvironmentDialog) -> Unit,
+    shapes: ListItemShapes,
     modifier: Modifier = Modifier,
 ) {
     val status =
@@ -154,16 +166,12 @@ private fun EnvironmentRow(
             stringResource(R.string.environment_current).takeIf { current },
             stringResource(R.string.environment_incomplete).takeIf { environment.incomplete },
         ).joinToString(stringResource(R.string.spec_info_separator))
-    ListItem(
+    SegmentedListItem(
+        selected = selected,
         onClick = onClick,
+        shapes = shapes,
         modifier = modifier,
-        leadingContent = {
-            Icon(
-                painterResource(if (environment.insecure) R.drawable.ic_warning else R.drawable.ic_public),
-                contentDescription = null,
-                tint = if (environment.insecure) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        },
+        leadingContent = { EnvironmentIcon(insecure = environment.insecure, current = current) },
         supportingContent =
             status.takeIf { it.isNotEmpty() }?.let {
                 {
@@ -171,12 +179,33 @@ private fun EnvironmentRow(
                 }
             },
         trailingContent = { EnvironmentMenu(environment, current, canDelete, onSelect, onDialog) },
-        colors =
-            ListItemDefaults.colors(
-                containerColor = with(MaterialTheme.colorScheme) { if (selected) secondaryContainer else surfaceContainerLow },
-            ),
+        colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.card),
     ) {
-        Text(environment.name)
+        Text(environment.name, style = MaterialTheme.typography.titleMediumEmphasized)
+    }
+}
+
+/** 当前环境用主色的花形衬底突出；跳过证书校验的环境用警示色（PRD 6）。 */
+@Composable
+private fun EnvironmentIcon(
+    insecure: Boolean,
+    current: Boolean,
+) {
+    val colors = MaterialTheme.colorScheme
+    val (container, content) =
+        when {
+            insecure -> colors.errorContainer to colors.onErrorContainer
+            current -> colors.primaryContainer to colors.onPrimaryContainer
+            else -> colors.surfaceContainerHigh to colors.onSurfaceVariant
+        }
+    val shape = if (current) MaterialShapes.Cookie9Sided.toShape() else MaterialShapes.Circle.toShape()
+    Box(Modifier.size(IconContainerSize).background(container, shape), contentAlignment = Alignment.Center) {
+        Icon(
+            painterResource(if (insecure) R.drawable.ic_warning else R.drawable.ic_public),
+            contentDescription = null,
+            modifier = Modifier.size(IconSize),
+            tint = content,
+        )
     }
 }
 
@@ -193,7 +222,7 @@ private fun EnvironmentMenu(
         IconButton(onClick = { expanded = true }) {
             Icon(painterResource(R.drawable.ic_more_vert), contentDescription = stringResource(R.string.action_more))
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, shape = MaterialTheme.shapes.large) {
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.environment_use)) },
                 enabled = !current,
@@ -306,6 +335,7 @@ private fun EnvironmentDialogs(
                     onDismiss()
                 },
                 onDismiss = onDismiss,
+                destructive = true,
             )
         }
     }
@@ -319,5 +349,6 @@ fun NoEnvironmentSelectedPane(modifier: Modifier = Modifier) {
     }
 }
 
-private val ScreenPadding = 16.dp
+private val IconContainerSize = 44.dp
+private val IconSize = 22.dp
 private val ListBottomPadding = 96.dp
