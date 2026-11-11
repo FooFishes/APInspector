@@ -110,12 +110,17 @@ class SettingsViewModel
         }
     }
 
-/** 设置页（PRD 6）：全屏打开。 */
+/**
+ * 设置页（PRD 6）：全屏打开。
+ *
+ * @param backup 最下面的"备份"分区（PRD 8）。
+ */
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    backup: @Composable () -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var confirmClear by remember { mutableStateOf(false) }
@@ -154,6 +159,7 @@ fun SettingsScreen(
                 onLimitChange = { limit -> viewModel.update { it.copy(bodyLimit = limit) } },
                 onClear = { confirmClear = true },
             )
+            backup()
         }
     }
     if (confirmClear) {

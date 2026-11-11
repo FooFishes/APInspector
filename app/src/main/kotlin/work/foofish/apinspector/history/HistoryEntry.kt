@@ -1,11 +1,11 @@
 package work.foofish.apinspector.history
 
 import work.foofish.apinspector.environment.EnvironmentId
-import work.foofish.apinspector.openapi.OperationKey
+import work.foofish.apinspector.openapi.HttpMethod
 import work.foofish.apinspector.openapi.request.Field
 import work.foofish.apinspector.openapi.request.HttpRequest
 import work.foofish.apinspector.openapi.request.RequestInput
-import work.foofish.apinspector.spec.SpecId
+import work.foofish.apinspector.request.RequestRef
 import java.time.Duration
 import java.time.Instant
 
@@ -20,19 +20,22 @@ enum class RequestSource {
     OPERATION,
     PRESET,
     REPLAY,
+    CUSTOM,
 }
 
 /**
  * 请求记录（PRD 7.1）。
  *
- * @property operation 发出请求的接口。
+ * @property ref 发出请求的接口或自定义请求。
+ * @property path 接口的路径模板；自定义请求为实际发出的 URL。
  * @property environmentId 所用环境；环境被删除后仍保留，但不再能找到。
  * @property input 发送时的当前参数，用于"恢复到当前参数"。
  */
 data class HistoryEntry(
     val id: HistoryEntryId,
-    val specId: SpecId,
-    val operation: OperationKey,
+    val ref: RequestRef,
+    val method: HttpMethod,
+    val path: String,
     val environmentId: EnvironmentId?,
     val environmentName: String?,
     val source: RequestSource,
@@ -44,10 +47,16 @@ data class HistoryEntry(
     val outcome: Outcome,
 )
 
-/** 列表中显示的请求记录摘要。 */
+/**
+ * 列表中显示的请求记录摘要。
+ *
+ * @property path 接口的路径模板；自定义请求为实际发出的 URL。
+ */
 data class HistorySummary(
     val id: HistoryEntryId,
-    val operation: OperationKey,
+    val method: HttpMethod,
+    val path: String,
+    val custom: Boolean,
     val sentAt: Instant,
     val duration: Duration,
     /** 收到响应时的状态码。 */

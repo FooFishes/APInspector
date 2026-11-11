@@ -18,6 +18,7 @@ import work.foofish.apinspector.history.HistorySummary
 import work.foofish.apinspector.history.NewHistoryEntry
 import work.foofish.apinspector.history.StoredBody
 import work.foofish.apinspector.openapi.OperationKey
+import work.foofish.apinspector.request.RequestRef
 import work.foofish.apinspector.spec.SpecId
 import java.io.File
 import java.nio.file.Path
@@ -29,20 +30,17 @@ class ResponseBodiesTest {
     /** 只提供 Body 文件的仓库。 */
     private inner class Files : HistoryRepository {
         override fun summaries(
-            specId: SpecId,
-            operation: OperationKey?,
+            specId: SpecId?,
+            ref: RequestRef?,
         ): Flow<List<HistorySummary>> = emptyFlow()
 
         override fun entry(id: HistoryEntryId): Flow<HistoryEntry?> = emptyFlow()
 
-        override fun latest(
-            specId: SpecId,
-            operation: OperationKey,
-        ): Flow<HistoryEntry?> = emptyFlow()
+        override fun latest(ref: RequestRef): Flow<HistoryEntry?> = emptyFlow()
 
         override suspend fun record(entry: NewHistoryEntry): HistoryEntryId = error("不需要")
 
-        override suspend fun clear(specId: SpecId) = Unit
+        override suspend fun clear(specId: SpecId?) = Unit
 
         override suspend fun bodyFile(body: StoredBody): File? = directory.resolve(body.fileName).toFile().takeIf(File::isFile)
     }

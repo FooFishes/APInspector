@@ -56,6 +56,7 @@ import work.foofish.apinspector.openapi.request.HttpBody
 import work.foofish.apinspector.openapi.request.HttpPart
 import work.foofish.apinspector.response.BodyDisplay
 import work.foofish.apinspector.response.ResponseDetail
+import work.foofish.apinspector.response.SetVariable
 import work.foofish.apinspector.ui.component.MethodBadge
 import work.foofish.apinspector.ui.component.SectionCard
 import work.foofish.apinspector.ui.text.formatDuration
@@ -85,6 +86,7 @@ class ResponseDetailActions(
     val onQueryChange: (String) -> Unit,
     val onDisplayChange: (BodyDisplay) -> Unit,
     val onSaveBody: (File, Uri) -> Unit,
+    val onSetVariable: (SetVariable) -> Unit,
 )
 
 /**

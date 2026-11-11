@@ -18,6 +18,9 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import androidx.window.core.layout.WindowSizeClass
 import kotlinx.coroutines.launch
+import work.foofish.apinspector.backup.ui.BackupSection
+import work.foofish.apinspector.custom.CustomRequestsOwner
+import work.foofish.apinspector.custom.CustomRequestsViewModel
 import work.foofish.apinspector.environment.ui.EnvironmentScreen
 import work.foofish.apinspector.environment.ui.EnvironmentViewModel
 import work.foofish.apinspector.environment.ui.EnvironmentsScreen
@@ -36,11 +39,13 @@ import work.foofish.apinspector.operationdoc.OperationDocViewModel
 import work.foofish.apinspector.operations.NoOperationSelectedPane
 import work.foofish.apinspector.operations.OperationListScreen
 import work.foofish.apinspector.operations.OperationListViewModel
+import work.foofish.apinspector.request.RequestTarget
 import work.foofish.apinspector.request.RequestViewModel
 import work.foofish.apinspector.request.ui.RequestTab
 import work.foofish.apinspector.response.ResponseViewModel
 import work.foofish.apinspector.response.ui.ResponseTab
 import work.foofish.apinspector.settings.ui.SettingsScreen
+import work.foofish.apinspector.ui.component.OperationTitle
 
 /**
  * 应用的导航宿主（PRD 1.2）。
@@ -82,6 +87,7 @@ fun APInspectorNavDisplay(modifier: Modifier = Modifier) {
                 entryProvider {
                     homeEntries(navigation)
                     specEntries(navigation)
+                    customEntries(backStack, multiPane)
                     historyEntries(navigation)
                     environmentEntries(navigation)
                 },
@@ -110,10 +116,15 @@ private class Navigation(
 private fun EntryProviderScope<NavKey>.homeEntries(navigation: Navigation) {
     val backStack = navigation.backStack
     entry<HomeKey>(metadata = ListDetailSceneStrategy.listPane(detailPlaceholder = { NoSpecSelectedPane() })) {
-        HomeScreen(onOpenSpec = backStack::openSpec, onOpenSettings = backStack::openSettings)
+        HomeScreen(onOpenSpec = backStack::openSpec, onOpenScratch = backStack::openScratch, onOpenSettings = backStack::openSettings)
     }
     entry<SettingsKey> {
-        SettingsScreen(viewModel = hiltViewModel(), onBack = navigation::back)
+        SettingsScreen(
+            viewModel = hiltViewModel(),
+            onBack = navigation::back,
+            // 导入覆盖了全部数据：之前打开的 API 文档与请求可能已不存在，回到首页。
+            backup = { BackupSection(hiltViewModel(), onImportComplete = { backStack.retainAll { it is HomeKey } }) },
+        )
     }
 }
 
@@ -122,8 +133,14 @@ private fun EntryProviderScope<NavKey>.specEntries(navigation: Navigation) {
     entry<SpecKey>(metadata = ListDetailSceneStrategy.listPane(detailPlaceholder = { NoOperationSelectedPane() })) { key ->
         OperationListScreen(
             viewModel = hiltViewModel<OperationListViewModel, OperationListViewModel.Factory>(creationCallback = { it.create(key) }),
+            customs =
+                hiltViewModel<CustomRequestsViewModel, CustomRequestsViewModel.Factory>(creationCallback = {
+                    it.create(CustomRequestsOwner(key.specId))
+                }),
             selected = backStack.currentOperation?.takeIf { it.specId == key.specId }?.operation,
+            selectedCustom = backStack.currentCustomRequest?.id,
             onOpenOperation = { backStack.openOperation(OperationPageKey(key.specId, it)) },
+            onOpenCustom = { backStack.openCustomRequest(CustomRequestKey(it)) },
             onOpenHistory = { backStack.openHistory(HistoryKey(key.specId, operation = null)) },
             onManageEnvironments = { backStack.openEnvironments(EnvironmentsKey(key.specId)) },
             onBack = navigation::back,
@@ -132,7 +149,7 @@ private fun EntryProviderScope<NavKey>.specEntries(navigation: Navigation) {
     }
     entry<OperationPageKey>(metadata = ListDetailSceneStrategy.detailPane()) { key ->
         OperationScreen(
-            operation = key.operation,
+            title = { OperationTitle(key.operation) },
             showBack = !navigation.multiPane,
             onBack = navigation::back,
             docTab = { modifier ->
@@ -143,7 +160,10 @@ private fun EntryProviderScope<NavKey>.specEntries(navigation: Navigation) {
             },
             requestTab = { onSend, modifier ->
                 RequestTab(
-                    viewModel = hiltViewModel<RequestViewModel, RequestViewModel.Factory>(creationCallback = { it.create(key) }),
+                    viewModel =
+                        hiltViewModel<RequestViewModel, RequestViewModel.Factory>(
+                            creationCallback = { it.create(RequestTarget.Operation(key.specId, key.operation)) },
+                        ),
                     onSend = onSend,
                     onManageEnvironments = { backStack.openEnvironments(EnvironmentsKey(key.specId)) },
                     modifier = modifier,
@@ -151,7 +171,10 @@ private fun EntryProviderScope<NavKey>.specEntries(navigation: Navigation) {
             },
             responseTab = { onRestore, modifier ->
                 ResponseTab(
-                    viewModel = hiltViewModel<ResponseViewModel, ResponseViewModel.Factory>(creationCallback = { it.create(key) }),
+                    viewModel =
+                        hiltViewModel<ResponseViewModel, ResponseViewModel.Factory>(
+                            creationCallback = { it.create(RequestTarget.Operation(key.specId, key.operation)) },
+                        ),
                     onRestore = onRestore,
                     onOpenHistory = { backStack.openHistory(HistoryKey(key.specId, key.operation)) },
                     modifier = modifier,
@@ -167,8 +190,8 @@ private fun EntryProviderScope<NavKey>.historyEntries(navigation: Navigation) {
         HistoryScreen(
             viewModel = hiltViewModel<HistoryViewModel, HistoryViewModel.Factory>(creationCallback = { it.create(key) }),
             selected = (backStack.lastOrNull() as? HistoryEntryKey)?.entry,
-            onOpen = { backStack.openHistoryEntry(HistoryEntryKey(key.specId, it.value)) },
-            onShowAll = { backStack.openHistory(HistoryKey(key.specId, operation = null)) },
+            onOpen = { backStack.openHistoryEntry(HistoryEntryKey(it.value)) },
+            onShowAll = { backStack.openHistory(HistoryKey(key.specId)) },
             onBack = navigation::back,
         )
     }

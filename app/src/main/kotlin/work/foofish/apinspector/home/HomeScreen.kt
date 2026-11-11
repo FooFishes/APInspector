@@ -90,6 +90,7 @@ import java.time.Instant
 @Composable
 fun HomeScreen(
     onOpenSpec: (SpecId) -> Unit,
+    onOpenScratch: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
@@ -101,6 +102,7 @@ fun HomeScreen(
         onImport = viewModel::import,
         onImportOutcomeConsume = viewModel::onImportOutcomeShown,
         onOpenSpec = onOpenSpec,
+        onOpenScratch = onOpenScratch,
         onPinChange = viewModel::setPinned,
         onDelete = viewModel::delete,
         onOpenSettings = onOpenSettings,
@@ -118,6 +120,7 @@ private fun HomeContent(
     onImport: (ImportSource) -> Unit,
     onImportOutcomeConsume: () -> Unit,
     onOpenSpec: (SpecId) -> Unit,
+    onOpenScratch: () -> Unit,
     onPinChange: (SpecId, Boolean) -> Unit,
     onDelete: (SpecId) -> Unit,
     onOpenSettings: () -> Unit,
@@ -155,6 +158,7 @@ private fun HomeContent(
             state = state,
             onQueryChange = onQueryChange,
             onOpenSpec = onOpenSpec,
+            onOpenScratch = onOpenScratch,
             onPinChange = onPinChange,
             onRequestDelete = { pendingDeletion = it },
             contentPadding = innerPadding,
@@ -222,15 +226,28 @@ private fun HomeBody(
     state: HomeUiState,
     onQueryChange: (String) -> Unit,
     onOpenSpec: (SpecId) -> Unit,
+    onOpenScratch: () -> Unit,
     onPinChange: (SpecId, Boolean) -> Unit,
     onRequestDelete: (SpecSummary) -> Unit,
     contentPadding: PaddingValues,
 ) {
     val specs = state.specs
     when {
-        specs == null -> LoadingState(Modifier.padding(contentPadding))
-        !state.hasSpecs -> CenteredEmptyState(Modifier.padding(contentPadding))
-        else -> SpecList(specs, onQueryChange, onOpenSpec, onPinChange, onRequestDelete, contentPadding)
+        specs == null -> {
+            LoadingState(Modifier.padding(contentPadding))
+        }
+
+        !state.hasSpecs -> {
+            // 还没有 API 文档时，"临时请求"入口照样固定在最上面（PRD 2）。
+            Column(Modifier.padding(contentPadding)) {
+                ScratchEntry(onClick = onOpenScratch, modifier = Modifier.padding(horizontal = ScreenPadding))
+                CenteredEmptyState(Modifier.weight(1f))
+            }
+        }
+
+        else -> {
+            SpecList(specs, onQueryChange, onOpenSpec, onOpenScratch, onPinChange, onRequestDelete, contentPadding)
+        }
     }
 }
 
@@ -331,6 +348,7 @@ private fun SpecList(
     specs: ImmutableList<SpecSummary>,
     onQueryChange: (String) -> Unit,
     onOpenSpec: (SpecId) -> Unit,
+    onOpenScratch: () -> Unit,
     onPinChange: (SpecId, Boolean) -> Unit,
     onRequestDelete: (SpecSummary) -> Unit,
     contentPadding: PaddingValues,
@@ -347,6 +365,9 @@ private fun SpecList(
                 onQueryChange = onQueryChange,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenPadding).padding(bottom = SearchSpacing),
             )
+        }
+        item(key = SCRATCH_KEY) {
+            ScratchEntry(onClick = onOpenScratch, modifier = Modifier.padding(horizontal = ScreenPadding).padding(bottom = SearchSpacing))
         }
         if (specs.isEmpty()) {
             item(key = NO_MATCH_KEY) {
@@ -369,6 +390,24 @@ private fun SpecList(
                 modifier = Modifier.animateItem().padding(horizontal = ScreenPadding),
             )
         }
+    }
+}
+
+/** 固定置顶的"临时请求"入口（PRD 2）：不可删除，不参与排序与搜索。 */
+@Composable
+private fun ScratchEntry(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SegmentedListItem(
+        onClick = onClick,
+        shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
+        modifier = modifier,
+        leadingContent = { Icon(painterResource(R.drawable.ic_send), contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+        supportingContent = { Text(stringResource(R.string.scratch_description), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+    ) {
+        Text(stringResource(R.string.scratch_title), style = MaterialTheme.typography.titleMediumEmphasized)
     }
 }
 
@@ -570,6 +609,7 @@ private const val NO_MATCH_KEY = "no-match"
 private const val HALF_PROGRESS = 0.5f
 private val NoMatchPadding = 32.dp
 private val SearchSpacing = 12.dp
+private const val SCRATCH_KEY = "scratch"
 private val ListBottomPadding = 96.dp
 private val PinIconSize = 18.dp
 private val OriginIconContainerSize = 44.dp
@@ -597,6 +637,7 @@ private fun HomeContentPreview() {
             onOpenSpec = {},
             onPinChange = { _, _ -> },
             onDelete = {},
+            onOpenScratch = {},
             onOpenSettings = {},
         )
     }

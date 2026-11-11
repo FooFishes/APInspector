@@ -18,6 +18,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -40,29 +41,32 @@ private enum class OperationTab(
 }
 
 /**
- * 接口详情（PRD 3）：文档、请求与响应三个 Tab，各种窗口宽度下相同。
+ * 接口详情（PRD 3）：文档、请求与响应三个 Tab，各种窗口宽度下相同，默认打开"文档"。
+ * 自定义请求（PRD 4.2）没有文档，只有请求与响应两个 Tab。
  *
  * @param showBack 单栏布局下显示返回按钮；双栏布局下位于详情栏，不需要返回。
+ * @param docTab 为 `null` 时不显示"文档" Tab。
  * @param requestTab 开始发送后调用 `onSend` 切到"响应"。
  * @param responseTab 恢复到当前参数后调用 `onRestore` 切到"请求"。
  */
 @Composable
 fun OperationScreen(
-    operation: OperationKey,
+    title: @Composable () -> Unit,
     showBack: Boolean,
     onBack: () -> Unit,
-    docTab: @Composable (Modifier) -> Unit,
+    docTab: (@Composable (Modifier) -> Unit)?,
     requestTab: @Composable (onSend: () -> Unit, Modifier) -> Unit,
     responseTab: @Composable (onRestore: () -> Unit, Modifier) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var tab by rememberSaveable { mutableStateOf(OperationTab.DOC) }
+    val tabs = remember(docTab == null) { OperationTab.entries.filter { it != OperationTab.DOC || docTab != null } }
+    var tab by rememberSaveable { mutableStateOf(tabs.first()) }
     Scaffold(
         modifier = modifier,
         containerColor = MaterialTheme.colorScheme.screen,
         topBar = {
             TopAppBar(
-                title = { OperationTitle(operation) },
+                title = title,
                 navigationIcon = {
                     if (showBack) {
                         BackButton(onClick = onBack)
@@ -73,8 +77,8 @@ fun OperationScreen(
         },
     ) { innerPadding ->
         Column(Modifier.padding(top = innerPadding.calculateTopPadding())) {
-            PrimaryTabRow(selectedTabIndex = tab.ordinal, containerColor = MaterialTheme.colorScheme.screen) {
-                OperationTab.entries.forEach { entry ->
+            PrimaryTabRow(selectedTabIndex = tabs.indexOf(tab), containerColor = MaterialTheme.colorScheme.screen) {
+                tabs.forEach { entry ->
                     Tab(
                         selected = tab == entry,
                         onClick = { tab = entry },
@@ -97,7 +101,7 @@ fun OperationScreen(
             ) { current ->
                 val content = Modifier.fillMaxSize()
                 when (current) {
-                    OperationTab.DOC -> docTab(content)
+                    OperationTab.DOC -> docTab?.invoke(content)
                     OperationTab.REQUEST -> requestTab({ tab = OperationTab.RESPONSE }, content)
                     OperationTab.RESPONSE -> responseTab({ tab = OperationTab.REQUEST }, content)
                 }

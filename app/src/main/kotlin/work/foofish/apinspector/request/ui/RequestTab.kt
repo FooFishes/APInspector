@@ -160,6 +160,8 @@ private fun RequestEditorContent(
                     pickFile.launch(arrayOf(ANY_FILE))
                 }
             }
+            state.custom?.takeIf { it.scratch }?.let { variablesSection(it.variables, actions::setVariables) }
+            rulesSection(state.rules, state.variables, actions)
         }
         SendBar(sending = state.sending, onSend = actions::send, onCancel = actions::cancel)
     }
@@ -179,8 +181,26 @@ private fun RequestEditorContent(
     }
 }
 
-/** 列表顶部：环境与预设，其下是请求预览。 */
+/**
+ * 列表顶部：环境与预设，其下是请求预览。自定义请求最上面是方法与地址；临时请求不用环境，也没有预设。
+ */
 private fun LazyListScope.headerItems(
+    state: RequestUiState.Loaded,
+    actions: RequestEditorActions,
+    onManageEnvironments: () -> Unit,
+) {
+    state.custom?.let { customAddressItem(it, actions) }
+    if (state.custom?.scratch != true) headerItem(state, actions, onManageEnvironments)
+    item(key = PREVIEW_KEY) {
+        RequestPreviewCard(
+            preview = state.preview,
+            onManageEnvironments = onManageEnvironments,
+            modifier = Modifier.animateItem().padding(horizontal = ScreenPadding).padding(top = HeaderSpacing),
+        )
+    }
+}
+
+private fun LazyListScope.headerItem(
     state: RequestUiState.Loaded,
     actions: RequestEditorActions,
     onManageEnvironments: () -> Unit,
@@ -191,13 +211,6 @@ private fun LazyListScope.headerItems(
             actions,
             onManageEnvironments,
             Modifier.padding(horizontal = ScreenPadding).padding(top = HeaderSpacing),
-        )
-    }
-    item(key = PREVIEW_KEY) {
-        RequestPreviewCard(
-            preview = state.preview,
-            onManageEnvironments = onManageEnvironments,
-            modifier = Modifier.animateItem().padding(horizontal = ScreenPadding).padding(top = HeaderSpacing),
         )
     }
 }

@@ -52,6 +52,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
 import work.foofish.apinspector.R
+import work.foofish.apinspector.custom.CustomRequestId
+import work.foofish.apinspector.custom.CustomRequestsViewModel
+import work.foofish.apinspector.custom.ui.CustomRequestDialogs
+import work.foofish.apinspector.custom.ui.customRequestSection
+import work.foofish.apinspector.custom.ui.matching
+import work.foofish.apinspector.custom.ui.rememberCustomRequestsHost
 import work.foofish.apinspector.environment.EnvironmentId
 import work.foofish.apinspector.openapi.OperationKey
 import work.foofish.apinspector.openapi.ParseWarning
@@ -80,8 +86,11 @@ import work.foofish.apinspector.ui.theme.screenTopAppBarColors
 @Composable
 fun OperationListScreen(
     viewModel: OperationListViewModel,
+    customs: CustomRequestsViewModel,
     selected: OperationKey?,
+    selectedCustom: CustomRequestId?,
     onOpenOperation: (OperationKey) -> Unit,
+    onOpenCustom: (CustomRequestId) -> Unit,
     onOpenHistory: () -> Unit,
     onManageEnvironments: () -> Unit,
     onBack: () -> Unit,
@@ -89,9 +98,13 @@ fun OperationListScreen(
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val customState by customs.uiState.collectAsStateWithLifecycle()
+    val host = rememberCustomRequestsHost(customs, onOpenCustom)
+    val requests = remember(customState.requests, state.query) { customState.requests.orEmpty().matching(state.query) }
     OperationListContent(
         state = state,
         selected = selected,
+        customSection = { customRequestSection(requests, selectedCustom, host, onOpenCustom) },
         onQueryChange = viewModel::onQueryChange,
         onToggleSection = viewModel::toggleSection,
         onSetFavorite = viewModel::setFavorite,
@@ -107,6 +120,7 @@ fun OperationListScreen(
             ),
         modifier = modifier,
     )
+    CustomRequestDialogs(host, customState.moveTargets)
     when (val refresh = state.refresh) {
         is RefreshStatus.ConfirmingRemoval -> {
             ConfirmRemovalDialog(
@@ -143,6 +157,7 @@ fun OperationListScreen(
 private fun OperationListContent(
     state: OperationListUiState,
     selected: OperationKey?,
+    customSection: LazyListScope.() -> Unit,
     onQueryChange: (String) -> Unit,
     onToggleSection: (SectionId) -> Unit,
     onSetFavorite: (OperationKey, Boolean) -> Unit,
@@ -183,19 +198,18 @@ private fun OperationListContent(
             }
 
             is OperationListContent.Loaded -> {
-                if (!content.hasOperations) {
-                    Message(R.drawable.ic_api, stringResource(R.string.operations_empty), body = null, Modifier.padding(innerPadding))
-                } else {
-                    OperationList(
-                        sections = content.sections,
-                        selected = selected,
-                        onQueryChange = onQueryChange,
-                        onToggleSection = onToggleSection,
-                        onSetFavorite = onSetFavorite,
-                        onOpenOperation = onOpenOperation,
-                        contentPadding = innerPadding,
-                    )
-                }
+                OperationList(
+                    sections = content.sections,
+                    // 文档本身没有接口时，仍然可以在这里建自定义请求。
+                    emptyText = stringResource(if (content.hasOperations) R.string.operations_no_match else R.string.operations_empty),
+                    selected = selected,
+                    customSection = customSection,
+                    onQueryChange = onQueryChange,
+                    onToggleSection = onToggleSection,
+                    onSetFavorite = onSetFavorite,
+                    onOpenOperation = onOpenOperation,
+                    contentPadding = innerPadding,
+                )
             }
         }
     }
@@ -273,7 +287,9 @@ private class OperationListBarActions(
 @Composable
 private fun OperationList(
     sections: ImmutableList<OperationSection>,
+    emptyText: String,
     selected: OperationKey?,
+    customSection: LazyListScope.() -> Unit,
     onQueryChange: (String) -> Unit,
     onToggleSection: (SectionId) -> Unit,
     onSetFavorite: (OperationKey, Boolean) -> Unit,
@@ -293,10 +309,11 @@ private fun OperationList(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenPadding).padding(bottom = SectionSpacing),
             )
         }
+        customSection()
         if (sections.isEmpty()) {
             item(key = NO_MATCH_KEY) {
                 Text(
-                    text = stringResource(R.string.operations_no_match),
+                    text = emptyText,
                     modifier = Modifier.fillMaxWidth().padding(NoMatchPadding),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

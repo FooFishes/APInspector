@@ -5,9 +5,11 @@ import androidx.room3.Entity
 import androidx.room3.ForeignKey
 import androidx.room3.Index
 import androidx.room3.PrimaryKey
+import kotlinx.serialization.Serializable
 import work.foofish.apinspector.spec.data.SpecEntity
 
 /** 环境；API 文档删除时一并删除。结构化字段以 JSON 文本保存（见 StorageJson）。 */
+@Serializable
 @Entity(
     tableName = "environment",
     foreignKeys = [
@@ -31,6 +33,7 @@ data class EnvironmentEntity(
 )
 
 /** Cookie 罐中的一个 Cookie（PRD 6）；环境删除时一并删除。 */
+@Serializable
 @Entity(
     tableName = "cookie",
     primaryKeys = ["environment_id", "name", "domain", "path"],

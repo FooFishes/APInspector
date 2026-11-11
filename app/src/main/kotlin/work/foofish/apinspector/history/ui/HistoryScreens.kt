@@ -46,6 +46,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.launch
 import work.foofish.apinspector.R
+import work.foofish.apinspector.history.HistoryEntry
 import work.foofish.apinspector.history.HistoryEntryId
 import work.foofish.apinspector.history.HistorySummary
 import work.foofish.apinspector.history.OutcomeKind
@@ -56,6 +57,7 @@ import work.foofish.apinspector.response.ui.ResponseDetailContent
 import work.foofish.apinspector.response.ui.SaveFailureDialog
 import work.foofish.apinspector.response.ui.SendingBanner
 import work.foofish.apinspector.response.ui.StatusBadge
+import work.foofish.apinspector.response.ui.VariableFailureDialog
 import work.foofish.apinspector.ui.component.BackButton
 import work.foofish.apinspector.ui.component.ConfirmDialog
 import work.foofish.apinspector.ui.component.EmptyState
@@ -101,7 +103,7 @@ fun HistoryScreen(
                 },
                 colors = screenTopAppBarColors(),
                 actions = {
-                    if (state.operation != null) {
+                    if (state.single) {
                         IconButton(onClick = onShowAll) {
                             Icon(painterResource(R.drawable.ic_filter_list), contentDescription = stringResource(R.string.history_show_all))
                         }
@@ -127,7 +129,7 @@ fun HistoryScreen(
                 HistoryList(
                     entries = entries,
                     selected = selected,
-                    singleOperation = state.operation != null,
+                    singleOperation = state.single,
                     onOpen = onOpen,
                     topPadding = innerPadding.calculateTopPadding(),
                 )
@@ -259,12 +261,12 @@ private fun HistoryRow(
             if (singleOperation) {
                 Box(Modifier.widthIn(min = OutcomeSlotWidth), contentAlignment = Alignment.Center) { OutcomeMark(summary) }
             } else {
-                MethodBadge(summary.operation.method)
+                MethodBadge(summary.method)
             }
         },
         content = {
             Text(
-                text = if (singleOperation) time else summary.operation.path,
+                text = if (singleOperation) time else summary.path,
                 style = MaterialTheme.typography.codeMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -326,22 +328,20 @@ fun HistoryEntryScreen(
     val scope = rememberCoroutineScope()
     val restoredMessage = stringResource(R.string.history_restored)
     val actions =
-        remember(viewModel) { ResponseDetailActions(viewModel::toggle, viewModel::setQuery, viewModel::setDisplay, viewModel::saveBody) }
+        remember(viewModel) {
+            ResponseDetailActions(
+                viewModel::toggle,
+                viewModel::setQuery,
+                viewModel::setDisplay,
+                viewModel::saveBody,
+                viewModel::setVariable,
+            )
+        }
     Scaffold(
         modifier = modifier,
         containerColor = MaterialTheme.colorScheme.screen,
         snackbarHost = { SnackbarHost(snackbar) },
-        topBar = {
-            TopAppBar(
-                title = { state.detail?.entry?.let { OperationTitle(it.operation) } },
-                navigationIcon = {
-                    if (showBack) {
-                        BackButton(onClick = onBack)
-                    }
-                },
-                colors = screenTopAppBarColors(),
-            )
-        },
+        topBar = { EntryTopBar(state.detail?.entry, showBack, onBack) },
     ) { innerPadding ->
         val detail = state.detail
         Column(Modifier.padding(innerPadding)) {
@@ -375,6 +375,25 @@ fun HistoryEntryScreen(
         }
     }
     saveFailure?.let { SaveFailureDialog(it, viewModel::dismissSaveFailure) }
+    val variableFailed by viewModel.variableFailed.collectAsStateWithLifecycle()
+    if (variableFailed) VariableFailureDialog(viewModel::onVariableFailureShown)
+}
+
+@Composable
+private fun EntryTopBar(
+    entry: HistoryEntry?,
+    showBack: Boolean,
+    onBack: () -> Unit,
+) {
+    TopAppBar(
+        title = { entry?.let { OperationTitle(it.method, it.path) } },
+        navigationIcon = {
+            if (showBack) {
+                BackButton(onClick = onBack)
+            }
+        },
+        colors = screenTopAppBarColors(),
+    )
 }
 
 /** 双栏布局下右侧未选择记录时的占位。 */

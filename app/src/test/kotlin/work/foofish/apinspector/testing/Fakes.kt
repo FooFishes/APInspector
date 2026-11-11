@@ -19,7 +19,6 @@ import work.foofish.apinspector.environment.EnvironmentRepository
 import work.foofish.apinspector.network.FileAccess
 import work.foofish.apinspector.network.RequestSender
 import work.foofish.apinspector.network.SendJob
-import work.foofish.apinspector.network.SendTarget
 import work.foofish.apinspector.openapi.OpenApiDocument
 import work.foofish.apinspector.openapi.OperationKey
 import work.foofish.apinspector.openapi.request.FileRef
@@ -28,6 +27,7 @@ import work.foofish.apinspector.openapi.request.environmentTemplates
 import work.foofish.apinspector.request.Preset
 import work.foofish.apinspector.request.PresetId
 import work.foofish.apinspector.request.RequestInputRepository
+import work.foofish.apinspector.request.RequestRef
 import work.foofish.apinspector.request.WorkingParams
 import work.foofish.apinspector.spec.SpecId
 import java.io.File
@@ -185,11 +185,11 @@ class FakeRequestInputRepository : RequestInputRepository {
 
 /** 记录发送请求的执行器；请求一直在途，直到测试调用 [finish]。 */
 class FakeRequestSender : RequestSender {
-    private val running = MutableStateFlow(emptyMap<SendTarget, Instant>())
+    private val running = MutableStateFlow(emptyMap<RequestRef, Instant>())
     val sent = mutableListOf<SendJob>()
-    val cancelled = mutableListOf<SendTarget>()
+    val cancelled = mutableListOf<RequestRef>()
 
-    override val inFlight: StateFlow<Map<SendTarget, Instant>> = running
+    override val inFlight: StateFlow<Map<RequestRef, Instant>> = running
 
     override fun send(job: SendJob): Boolean {
         if (job.target in running.value) return false
@@ -198,12 +198,12 @@ class FakeRequestSender : RequestSender {
         return true
     }
 
-    override fun cancel(target: SendTarget) {
+    override fun cancel(target: RequestRef) {
         cancelled += target
         finish(target)
     }
 
-    fun finish(target: SendTarget) {
+    fun finish(target: RequestRef) {
         running.update { it - target }
     }
 }

@@ -73,6 +73,7 @@ import work.foofish.apinspector.response.BodyView
 import work.foofish.apinspector.response.JsonViewKind
 import work.foofish.apinspector.response.JsonViewRow
 import work.foofish.apinspector.response.ResponseDetail
+import work.foofish.apinspector.response.SetVariable
 import work.foofish.apinspector.ui.component.ChoiceGroup
 import work.foofish.apinspector.ui.component.PillSearchField
 import work.foofish.apinspector.ui.component.rememberSyncedTextFieldState
@@ -194,7 +195,7 @@ private fun TextualBody(
         ) {
             if (rows != null) {
                 LazyColumn(contentPadding = PaddingValues(vertical = DetailSpacing)) {
-                    items(rows, key = JsonViewRow::path) { row -> JsonTreeRow(row, actions.onToggle) }
+                    items(rows, key = JsonViewRow::path) { row -> JsonTreeRow(row, actions.onToggle, actions.onSetVariable) }
                 }
             } else {
                 RawText(detail.formatted.orEmpty(), detail.query)
@@ -224,9 +225,9 @@ private fun DisplaySwitch(
 private fun JsonTreeRow(
     row: JsonViewRow,
     onToggle: (String) -> Unit,
+    onSetVariable: (SetVariable) -> Unit,
 ) {
-    val clipboard = LocalClipboard.current
-    val scope = rememberCoroutineScope()
+    var settingVariable by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     val container = row.kind == JsonViewKind.OBJECT || row.kind == JsonViewKind.ARRAY
     val rotation by animateFloatAsState(if (row.expanded) 0f else COLLAPSED_ROTATION, label = "chevron")
@@ -253,21 +254,48 @@ private fun JsonTreeRow(
             }
             Text(text = treeText(row), style = MaterialTheme.typography.codeSmall)
         }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, shape = MaterialTheme.shapes.large) {
-            row.value?.let { value ->
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.detail_copy_value)) },
-                    onClick = {
-                        menu = false
-                        scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText(row.path, value))) }
-                    },
-                )
-            }
+        TreeRowMenu(row, expanded = menu, onDismiss = { menu = false }, onSetVariable = { settingVariable = true })
+    }
+    val value = row.value
+    if (settingVariable && value != null) {
+        SetVariableDialog(
+            path = row.path,
+            value = value,
+            onConfirm = {
+                settingVariable = false
+                onSetVariable(it)
+            },
+            onDismiss = { settingVariable = false },
+        )
+    }
+}
+
+/** 长按一行的菜单：复制值、复制路径、设为变量（PRD 7.2）；对象与数组没有可复制的值。 */
+@Composable
+private fun TreeRowMenu(
+    row: JsonViewRow,
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    onSetVariable: () -> Unit,
+) {
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
+
+    fun copy(text: String) {
+        onDismiss()
+        scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText(row.path, text))) }
+    }
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss, shape = MaterialTheme.shapes.large) {
+        row.value?.let { value ->
+            DropdownMenuItem(text = { Text(stringResource(R.string.detail_copy_value)) }, onClick = { copy(value) })
+        }
+        DropdownMenuItem(text = { Text(stringResource(R.string.detail_copy_path)) }, onClick = { copy(row.path) })
+        if (row.value != null) {
             DropdownMenuItem(
-                text = { Text(stringResource(R.string.detail_copy_path)) },
+                text = { Text(stringResource(R.string.detail_set_variable)) },
                 onClick = {
-                    menu = false
-                    scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText(row.path, row.path))) }
+                    onDismiss()
+                    onSetVariable()
                 },
             )
         }

@@ -72,6 +72,7 @@ fun RequestSource.label(): Int =
         RequestSource.OPERATION -> R.string.history_source_operation
         RequestSource.PRESET -> R.string.history_source_preset
         RequestSource.REPLAY -> R.string.history_source_replay
+        RequestSource.CUSTOM -> R.string.history_source_custom
     }
 
 @Composable

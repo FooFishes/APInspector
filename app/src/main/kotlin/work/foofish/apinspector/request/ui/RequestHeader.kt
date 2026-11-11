@@ -54,19 +54,22 @@ internal fun RequestHeader(
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
         EnvironmentSelector(state.environments, state.environment, actions::selectEnvironment, onManageEnvironments)
-        PresetSelector(
-            state = state.presets,
-            onLoad = { id ->
-                if (state.presets.current != null &&
-                    state.presets.modified
-                ) {
-                    dialog = PresetDialog.ConfirmLoad(id)
-                } else {
-                    actions.loadPreset(id)
-                }
-            },
-            onDialog = { dialog = it },
-        )
+        // 预设绑定接口（PRD 4.1）：自定义请求没有预设。
+        if (state.custom == null) {
+            PresetSelector(
+                state = state.presets,
+                onLoad = { id ->
+                    if (state.presets.current != null &&
+                        state.presets.modified
+                    ) {
+                        dialog = PresetDialog.ConfirmLoad(id)
+                    } else {
+                        actions.loadPreset(id)
+                    }
+                },
+                onDialog = { dialog = it },
+            )
+        }
     }
     PresetDialogs(dialog, state.presets, actions) { dialog = null }
 }

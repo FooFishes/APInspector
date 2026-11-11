@@ -5,6 +5,7 @@ import androidx.room3.Entity
 import androidx.room3.ForeignKey
 import androidx.room3.Index
 import androidx.room3.PrimaryKey
+import kotlinx.serialization.Serializable
 import work.foofish.apinspector.spec.data.SpecEntity
 
 /**
@@ -12,6 +13,7 @@ import work.foofish.apinspector.spec.data.SpecEntity
  *
  * @property presetId 当前参数加载自哪个预设；预设删除后置空。
  */
+@Serializable
 @Entity(
     tableName = "working_params",
     primaryKeys = ["spec_id", "method", "path"],
@@ -31,6 +33,7 @@ data class WorkingParamsEntity(
 )
 
 /** 接口的命名预设（PRD 4.1）；同一接口内名称不重复。 */
+@Serializable
 @Entity(
     tableName = "preset",
     foreignKeys = [

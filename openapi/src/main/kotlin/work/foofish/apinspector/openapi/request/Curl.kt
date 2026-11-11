@@ -35,6 +35,12 @@ public object Curl {
         return arguments.joinToString(LINE_CONTINUATION)
     }
 
+    /**
+     * 解析粘贴的 cURL 命令（PRD 4.2"cURL 导入"）：支持 `-X -H -d/--data-raw -F -u --compressed` 等常用参数，
+     * 未识别的参数忽略并记入 [CurlImport.ignored]。
+     */
+    public fun parse(command: String): CurlParse = CurlParser.parse(command)
+
     private fun quote(value: String): String = "'" + value.replace("'", """'\''""") + "'"
 
     private const val COMMAND = "curl"

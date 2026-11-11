@@ -11,35 +11,41 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import work.foofish.apinspector.core.coroutines.ApplicationScope
+import work.foofish.apinspector.custom.CustomRequest
+import work.foofish.apinspector.custom.CustomRequestRepository
 import work.foofish.apinspector.environment.Environment
 import work.foofish.apinspector.environment.EnvironmentId
 import work.foofish.apinspector.environment.EnvironmentRepository
+import work.foofish.apinspector.extraction.ExtractionRule
+import work.foofish.apinspector.extraction.ExtractionRuleId
+import work.foofish.apinspector.extraction.ExtractionRuleRepository
 import work.foofish.apinspector.history.RequestSource
-import work.foofish.apinspector.navigation.OperationPageKey
 import work.foofish.apinspector.network.FileAccess
 import work.foofish.apinspector.network.RequestSender
 import work.foofish.apinspector.network.SendJob
-import work.foofish.apinspector.network.SendTarget
 import work.foofish.apinspector.network.UserAgent
+import work.foofish.apinspector.openapi.HttpMethod
 import work.foofish.apinspector.openapi.OpenApiDocument
 import work.foofish.apinspector.openapi.Operation
-import work.foofish.apinspector.openapi.OperationKey
 import work.foofish.apinspector.openapi.ParameterLocation
 import work.foofish.apinspector.openapi.Schema
 import work.foofish.apinspector.openapi.request.Assembly
 import work.foofish.apinspector.openapi.request.BodyInput
+import work.foofish.apinspector.openapi.request.EnvironmentVariable
 import work.foofish.apinspector.openapi.request.ExtraParameter
 import work.foofish.apinspector.openapi.request.FileRef
 import work.foofish.apinspector.openapi.request.HttpBody
@@ -51,6 +57,7 @@ import work.foofish.apinspector.openapi.request.MultipartPart
 import work.foofish.apinspector.openapi.request.ParameterValue
 import work.foofish.apinspector.openapi.request.PartValue
 import work.foofish.apinspector.openapi.request.RequestAssembler
+import work.foofish.apinspector.openapi.request.RequestEnvironment
 import work.foofish.apinspector.openapi.request.RequestInput
 import work.foofish.apinspector.openapi.request.alignedTo
 import work.foofish.apinspector.openapi.request.bodyContents
@@ -64,8 +71,8 @@ import work.foofish.apinspector.request.body.replace
 import work.foofish.apinspector.request.body.sampleNode
 import work.foofish.apinspector.request.body.schemaAt
 import work.foofish.apinspector.request.body.variantSample
-import work.foofish.apinspector.spec.DocumentLoad
 import work.foofish.apinspector.spec.ImportFailure
+import work.foofish.apinspector.spec.SpecId
 import work.foofish.apinspector.spec.SpecRepository
 import work.foofish.apinspector.spec.observeDocument
 
@@ -82,6 +89,7 @@ sealed interface RequestUiState {
     /**
      * @property problems 阻止发送的原因；不为 `null` 时显示对话框。
      * @property sent 刚刚开始发送，界面切到"响应" Tab 后调用 [RequestViewModel.onSentShown]。
+     * @property custom 编辑的是自定义请求时给出；此时没有声明的参数与预设。
      */
     data class Loaded(
         val environments: ImmutableList<EnvironmentOption>,
@@ -91,6 +99,8 @@ sealed interface RequestUiState {
         val groups: ImmutableList<ParameterGroup>,
         val extras: ImmutableList<ExtraParameter>,
         val body: BodyEditor?,
+        val custom: CustomEditor?,
+        val rules: ImmutableList<ExtractionRule>,
         val preview: RequestPreview,
         val sending: Boolean,
         val problems: ImmutableList<SendProblem>?,
@@ -120,15 +130,19 @@ sealed interface FileTarget {
 
 /**
  * "请求" Tab（PRD 3、4）：编辑当前参数（即时保存）、选择环境与预设、发送。
+ *
+ * 自定义请求（PRD 4.2）也由它编辑：被表示成一个没有声明参数的接口（见 [asOperation]），内容保存在自定义请求自身上。
  */
 @HiltViewModel(assistedFactory = RequestViewModel.Factory::class)
 class RequestViewModel
     @AssistedInject
     constructor(
-        @Assisted key: OperationPageKey,
+        @Assisted target: RequestTarget,
         specs: SpecRepository,
         private val environments: EnvironmentRepository,
         private val inputs: RequestInputRepository,
+        private val customs: CustomRequestRepository,
+        private val rules: ExtractionRuleRepository,
         private val executor: RequestSender,
         private val files: FileAccess,
         @UserAgent private val userAgent: String,
@@ -137,54 +151,98 @@ class RequestViewModel
         RequestEditorActions {
         @AssistedFactory
         interface Factory {
-            fun create(key: OperationPageKey): RequestViewModel
+            fun create(target: RequestTarget): RequestViewModel
         }
 
-        private val specId = key.specId
-        private val operationKey = key.operation
-        private val target = SendTarget(specId, operationKey)
+        private val operationTarget = target as? RequestTarget.Operation
+        private val customId = (target as? RequestTarget.Custom)?.id
 
+        /** 自定义请求的本地内容：编辑立即生效，随后保存。 */
+        private val custom = MutableStateFlow(if (customId == null) CustomState.None else CustomState.Unknown)
+
+        /** 所属的 API 文档；临时请求为 `null`。 */
+        private val specIds: Flow<SpecId?> =
+            operationTarget?.let { flowOf(it.specId) }
+                ?: custom.map { (it as? CustomState.Known)?.request?.specId }.distinctUntilChanged()
+
+        @OptIn(ExperimentalCoroutinesApi::class)
         private val context: StateFlow<EditContext?> =
-            specs
-                .observeDocument(specId)
-                .map { load -> EditContext.of(load, operationKey) }
+            specIds
+                .flatMapLatest { id -> if (id == null) flowOf(null) else specs.observeDocument(id) }
+                .let { documents ->
+                    if (operationTarget != null) {
+                        documents.map { load -> load?.let { EditContext.of(it, operationTarget.key) } }
+                    } else {
+                        combine(custom, documents) { state, load -> EditContext.of(state, load) }
+                    }
+                }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+        @OptIn(ExperimentalCoroutinesApi::class)
+        private val currentEnvironment: StateFlow<Environment?> =
+            specIds
+                .flatMapLatest { id -> if (id == null) flowOf(null) else environments.current(id) }
                 .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-        private val currentEnvironment: StateFlow<Environment?> =
-            environments.current(specId).stateIn(viewModelScope, SharingStarted.Eagerly, null)
+        @OptIn(ExperimentalCoroutinesApi::class)
+        private val allEnvironments: Flow<List<Environment>> =
+            specIds.flatMapLatest { id -> if (id == null) flowOf(emptyList()) else environments.environments(id) }
 
-        private val presets = inputs.presets(specId, operationKey).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        /** 预设绑定接口（PRD 4.1）；自定义请求没有预设。 */
+        private val presets =
+            (operationTarget?.let { inputs.presets(it.specId, it.key) } ?: flowOf(emptyList()))
+                .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+        /** 提取规则只以自定义请求的标识查找，与它当前归属哪份 API 文档无关。 */
+        private val ruleRef: RequestRef =
+            operationTarget?.let { RequestRef.Operation(it.specId, it.key) } ?: RequestRef.Custom(checkNotNull(customId), specId = null)
 
         /** 本地的当前参数：编辑立即生效，随后在应用作用域中保存。 */
         private val working = MutableStateFlow<WorkingState>(WorkingState.Unknown)
         private val view = MutableStateFlow(ViewState())
 
-        private val saving = Mutex()
-        private var pending: WorkingParams? = null
-        private var persisted: WorkingParams? = null
-
-        /** 自己写入过的值：仓库回传它们时不必采用，以免覆盖之后的编辑。 */
-        private val written = LinkedHashSet<WorkingParams>()
+        private val paramsSaver =
+            LocalFirstSaver<WorkingParams>(applicationScope) { params ->
+                operationTarget?.let { inputs.saveWorking(it.specId, it.key, params) }
+            }
+        private val customSaver = LocalFirstSaver(applicationScope, customs::update)
 
         init {
-            viewModelScope.launch {
-                inputs.working(specId, operationKey).collect { stored ->
-                    val ours = synchronized(written) { stored in written }
-                    when {
-                        stored == null -> working.update { if (it is WorkingState.Unknown) WorkingState.Known(null) else it }
-                        !ours -> working.value = WorkingState.Known(stored)
+            if (operationTarget != null) {
+                viewModelScope.launch {
+                    inputs.working(operationTarget.specId, operationTarget.key).collect { stored ->
+                        when {
+                            stored == null -> working.update { if (it is WorkingState.Unknown) WorkingState.Known(null) else it }
+                            !paramsSaver.isOurs(stored) -> working.value = WorkingState.Known(stored)
+                        }
+                    }
+                }
+            }
+            if (customId != null) {
+                viewModelScope.launch {
+                    customs.request(customId).collect { stored ->
+                        when {
+                            stored == null -> custom.value = CustomState.Missing
+                            !customSaver.isOurs(stored) -> adopt(stored)
+                        }
                     }
                 }
             }
             viewModelScope.launch {
                 context.collect { context ->
-                    if (context is EditContext.Ready) environments.ensureEnvironments(specId, context.document)
+                    val specId = (context as? EditContext.Ready)?.specId(operationTarget?.specId)
+                    if (context is EditContext.Ready && specId != null) environments.ensureEnvironments(specId, context.document)
                 }
             }
         }
 
+        /** 采用仓库中的自定义请求：首次加载，或由别处修改（移动、恢复到当前参数、提取规则写入变量）。 */
+        private fun adopt(stored: CustomRequest) {
+            custom.value = CustomState.Known(stored)
+            working.value = WorkingState.Known(WorkingParams(stored.input, presetId = null))
+        }
+
         private val editorInputs =
-            combine(context, environments.environments(specId), currentEnvironment, presets) { context, all, current, presets ->
+            combine(context, allEnvironments, currentEnvironment, presets) { context, all, current, presets ->
                 EditorInputs(context, all, current, presets)
             }
 
@@ -193,8 +251,9 @@ class RequestViewModel
                 editorInputs,
                 working,
                 view,
-                executor.inFlight.map { target in it }.distinctUntilChanged(),
-            ) { inputs, working, view, sending ->
+                executor.inFlight.map { flights -> flights.keys.any(::isThisRequest) }.distinctUntilChanged(),
+                rules.rules(ruleRef),
+            ) { inputs, working, view, sending, rules ->
                 when (val context = inputs.context) {
                     null -> {
                         RequestUiState.Loading
@@ -212,30 +271,46 @@ class RequestViewModel
                         if (working is WorkingState.Unknown) {
                             RequestUiState.Loading
                         } else {
-                            loaded(
-                                context,
-                                inputs,
-                                working,
-                                view,
-                                sending,
-                            )
+                            loaded(context, inputs, working, view, sending, rules)
                         }
                     }
                 }
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), RequestUiState.Loading)
 
+        private fun isThisRequest(ref: RequestRef): Boolean =
+            when (ref) {
+                is RequestRef.Operation -> operationTarget != null && ref.specId == operationTarget.specId && ref.key == operationTarget.key
+                is RequestRef.Custom -> ref.id == customId
+            }
+
+        /** 组装实际请求；需要环境而没有时为 `null`。临时请求不用环境，变量来自它自己（ADR-0002）。 */
+        private fun assemble(
+            context: EditContext.Ready,
+            input: RequestInput,
+            environment: Environment?,
+        ): Assembly? {
+            val assembler = RequestAssembler(context.document, userAgent)
+            val custom =
+                context.custom ?: return environment?.let { assembler.assemble(context.operation, input, it.toRequestEnvironment()) }
+            val requestEnvironment =
+                if (custom.specId == null) {
+                    RequestEnvironment(baseUrl = "", variables = custom.variableValues, credentials = emptyMap())
+                } else {
+                    environment?.toRequestEnvironment()
+                }
+            return requestEnvironment?.let { assembler.assemble(custom.method, custom.url, input, it, context.operation.security) }
+        }
+
         private fun preview(
             context: EditContext.Ready,
             input: RequestInput,
             environment: Environment?,
-        ): RequestPreview {
-            if (environment == null) return RequestPreview(url = null, problems = persistentListOf(SendProblem.NoEnvironment))
-            val assembler = RequestAssembler(context.document, userAgent)
-            return when (val assembly = assembler.assemble(context.operation, input, environment.toRequestEnvironment())) {
+        ): RequestPreview =
+            when (val assembly = assemble(context, input, environment)) {
+                null -> RequestPreview(url = null, problems = persistentListOf(SendProblem.NoEnvironment))
                 is Assembly.Ready -> RequestPreview(assembly.request.url, persistentListOf())
                 is Assembly.Blocked -> RequestPreview(url = null, problems = assembly.problems.map(SendProblem::Assembly).toImmutableList())
             }
-        }
 
         private fun loaded(
             context: EditContext.Ready,
@@ -243,6 +318,7 @@ class RequestViewModel
             state: WorkingState,
             view: ViewState,
             sending: Boolean,
+            rules: List<ExtractionRule>,
         ): RequestUiState.Loaded {
             val params = aligned(context, (state as? WorkingState.Known)?.params)
             val builder = RequestEditorBuilder(context.document, context.operation)
@@ -251,8 +327,7 @@ class RequestViewModel
                 environments = inputs.environments.map(Environment::toOption).toImmutableList(),
                 environment = inputs.current?.toOption(),
                 variables =
-                    inputs.current
-                        ?.variables
+                    (context.custom?.takeIf { it.specId == null }?.variables ?: inputs.current?.variables)
                         .orEmpty()
                         .map { it.name }
                         .filter { it.isNotEmpty() }
@@ -266,6 +341,11 @@ class RequestViewModel
                 groups = builder.groups(params.input),
                 extras = params.input.extras.toImmutableList(),
                 body = builder.body(params.input, view.mode, view.collapsed),
+                custom =
+                    context.custom?.let {
+                        CustomEditor(it.name, it.method, it.url, scratch = it.specId == null, variables = it.variables.toImmutableList())
+                    },
+                rules = rules.toImmutableList(),
                 preview = preview(context, params.input, inputs.current),
                 sending = sending,
                 problems = view.problems,
@@ -274,7 +354,43 @@ class RequestViewModel
         }
 
         override fun selectEnvironment(id: EnvironmentId) {
+            val specId = (context.value as? EditContext.Ready)?.specId(operationTarget?.specId) ?: return
             viewModelScope.launch { environments.select(specId, id) }
+        }
+
+        override fun setMethod(method: HttpMethod) {
+            editCustom { it.copy(method = method) }
+        }
+
+        override fun setUrl(url: String) {
+            editCustom { it.copy(url = url) }
+        }
+
+        override fun setVariables(variables: List<EnvironmentVariable>) {
+            editCustom { it.copy(variables = variables) }
+        }
+
+        override fun addRule(
+            jsonPath: String,
+            variable: String,
+        ) {
+            viewModelScope.launch { rules.add(ruleRef, jsonPath, variable) }
+        }
+
+        override fun updateRule(rule: ExtractionRule) {
+            viewModelScope.launch { rules.update(rule) }
+        }
+
+        override fun removeRule(id: ExtractionRuleId) {
+            viewModelScope.launch { rules.delete(id) }
+        }
+
+        private fun editCustom(transform: (CustomRequest) -> CustomRequest) {
+            val request = (custom.value as? CustomState.Known)?.request ?: return
+            val next = transform(request)
+            if (next == request) return
+            custom.value = CustomState.Known(next)
+            customSaver.submit(next)
         }
 
         override fun setParameterValue(
@@ -440,12 +556,13 @@ class RequestViewModel
         }
 
         override fun saveAsPreset(name: String) {
+            val operation = operationTarget ?: return
             val context = context.value as? EditContext.Ready ?: return
             val params = aligned(context, (working.value as? WorkingState.Known)?.params)
             applicationScope.launch {
-                val id = inputs.createPreset(specId, operationKey, name, params.input)
+                val id = inputs.createPreset(operation.specId, operation.key, name, params.input)
                 val linked = WorkingParams(params.input, id)
-                remember(linked)
+                paramsSaver.remember(linked)
                 working.value = WorkingState.Known(linked)
             }
         }
@@ -470,47 +587,51 @@ class RequestViewModel
 
         override fun send() {
             val context = context.value as? EditContext.Ready ?: return
-            val environment = currentEnvironment.value ?: return showProblems(listOf(SendProblem.NoEnvironment))
+            val environment = currentEnvironment.value
             val params = aligned(context, (working.value as? WorkingState.Known)?.params)
-            when (
-                val assembly =
-                    RequestAssembler(
-                        context.document,
-                        userAgent,
-                    ).assemble(context.operation, params.input, environment.toRequestEnvironment())
-            ) {
-                is Assembly.Blocked -> {
-                    showProblems(assembly.problems.map(SendProblem::Assembly))
-                }
-
-                is Assembly.Ready -> {
-                    viewModelScope.launch {
-                        val unavailable =
-                            assembly.request.body
-                                .files()
-                                .filterNot { files.isReadable(it) }
-                        if (unavailable.isNotEmpty()) return@launch showProblems(unavailable.map { SendProblem.FileUnavailable(it.name) })
-                        val preset = presets.value.firstOrNull { it.id == params.presetId }
-                        val fromPreset = preset != null && preset.input.alignedTo(context.operation, context.document) == params.input
-                        val job =
-                            SendJob(
-                                target = target,
-                                environment = environment,
-                                request = assembly.request,
-                                cookies = assembly.cookies,
-                                loadCookieJar = true,
-                                input = params.input,
-                                source = if (fromPreset) RequestSource.PRESET else RequestSource.OPERATION,
-                                presetName = preset?.name?.takeIf { fromPreset },
-                            )
-                        if (executor.send(job)) view.update { it.copy(sent = true) }
-                    }
-                }
+            when (val assembly = assemble(context, params.input, environment)) {
+                null -> showProblems(listOf(SendProblem.NoEnvironment))
+                is Assembly.Blocked -> showProblems(assembly.problems.map(SendProblem::Assembly))
+                is Assembly.Ready -> viewModelScope.launch { send(context, params, environment, assembly) }
             }
         }
 
+        private suspend fun send(
+            context: EditContext.Ready,
+            params: WorkingParams,
+            environment: Environment?,
+            assembly: Assembly.Ready,
+        ) {
+            val unavailable =
+                assembly.request.body
+                    .files()
+                    .filterNot { files.isReadable(it) }
+            if (unavailable.isNotEmpty()) return showProblems(unavailable.map { SendProblem.FileUnavailable(it.name) })
+            val preset = presets.value.firstOrNull { it.id == params.presetId }
+            val fromPreset = preset != null && preset.input.alignedTo(context.operation, context.document) == params.input
+            val job =
+                SendJob(
+                    target = context.ref(operationTarget?.specId),
+                    environment = environment,
+                    request = assembly.request,
+                    cookies = assembly.cookies,
+                    loadCookieJar = true,
+                    input = params.input,
+                    source =
+                        when {
+                            context.custom != null -> RequestSource.CUSTOM
+                            fromPreset -> RequestSource.PRESET
+                            else -> RequestSource.OPERATION
+                        },
+                    presetName = preset?.name?.takeIf { fromPreset },
+                )
+            if (executor.send(job)) view.update { it.copy(sent = true) }
+        }
+
         override fun cancel() {
-            executor.cancel(target)
+            executor.inFlight.value.keys
+                .firstOrNull(::isThisRequest)
+                ?.let(executor::cancel)
         }
 
         override fun dismissProblems() {
@@ -560,28 +681,13 @@ class RequestViewModel
 
         private fun replaceWorking(params: WorkingParams) {
             working.value = WorkingState.Known(params)
-            persist(params)
-        }
-
-        /** 只保存最新的值；在应用作用域中进行，离开页面也会完成。 */
-        private fun persist(params: WorkingParams) {
-            pending = params
-            remember(params)
-            applicationScope.launch {
-                saving.withLock {
-                    val next = pending ?: return@withLock
-                    if (next != persisted) {
-                        inputs.saveWorking(specId, operationKey, next)
-                        persisted = next
-                    }
-                }
-            }
-        }
-
-        private fun remember(params: WorkingParams) {
-            synchronized(written) {
-                written += params
-                if (written.size > REMEMBERED_WRITES) written.remove(written.first())
+            val request = (custom.value as? CustomState.Known)?.request
+            if (request == null) {
+                paramsSaver.submit(params)
+            } else {
+                val next = request.copy(input = params.input)
+                custom.value = CustomState.Known(next)
+                customSaver.submit(next)
             }
         }
 
@@ -610,79 +716,5 @@ class RequestViewModel
 
         private companion object {
             const val STOP_TIMEOUT_MILLIS = 5_000L
-            const val REMEMBERED_WRITES = 32
         }
-    }
-
-/** 编辑所需的文档与接口。 */
-private sealed interface EditContext {
-    data object Missing : EditContext
-
-    data class Failed(
-        val failure: ImportFailure,
-    ) : EditContext
-
-    data class Ready(
-        val document: OpenApiDocument,
-        val operation: Operation,
-    ) : EditContext
-
-    companion object {
-        fun of(
-            load: DocumentLoad,
-            key: OperationKey,
-        ): EditContext =
-            when (load) {
-                DocumentLoad.Missing -> {
-                    Missing
-                }
-
-                is DocumentLoad.Failed -> {
-                    Failed(load.failure)
-                }
-
-                is DocumentLoad.Loaded -> {
-                    load.content.document
-                        .operations
-                        .firstOrNull { it.key == key }
-                        ?.let { Ready(load.content.document, it) } ?: Missing
-                }
-            }
-    }
-}
-
-private fun BodyInput.withFile(
-    target: FileTarget,
-    file: FileRef,
-): BodyInput =
-    when {
-        this is BodyInput.Binary && target == FileTarget.Body -> {
-            copy(file = file)
-        }
-
-        this is BodyInput.Multipart && target is FileTarget.Part -> {
-            copy(
-                parts =
-                    parts.mapIndexed { index, part ->
-                        if (index ==
-                            target.index
-                        ) {
-                            MultipartPart(part.name, PartValue.File(file))
-                        } else {
-                            part
-                        }
-                    },
-            )
-        }
-
-        else -> {
-            this
-        }
-    }
-
-private fun HttpBody?.files(): List<FileRef> =
-    when (this) {
-        is HttpBody.File -> listOf(file)
-        is HttpBody.Multipart -> parts.filterIsInstance<HttpPart.File>().map { it.file }
-        is HttpBody.Text, null -> emptyList()
     }

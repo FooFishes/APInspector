@@ -8,6 +8,9 @@ import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.serialization.json.JsonPrimitive
 import work.foofish.apinspector.environment.Environment
 import work.foofish.apinspector.environment.EnvironmentId
+import work.foofish.apinspector.extraction.ExtractionRule
+import work.foofish.apinspector.extraction.ExtractionRuleId
+import work.foofish.apinspector.openapi.HttpMethod
 import work.foofish.apinspector.openapi.OpenApiDocument
 import work.foofish.apinspector.openapi.Operation
 import work.foofish.apinspector.openapi.Parameter
@@ -16,6 +19,7 @@ import work.foofish.apinspector.openapi.Resolvable
 import work.foofish.apinspector.openapi.Schema
 import work.foofish.apinspector.openapi.request.AssemblyProblem
 import work.foofish.apinspector.openapi.request.BodyInput
+import work.foofish.apinspector.openapi.request.EnvironmentVariable
 import work.foofish.apinspector.openapi.request.ExtraParameter
 import work.foofish.apinspector.openapi.request.Field
 import work.foofish.apinspector.openapi.request.FileRef
@@ -89,6 +93,19 @@ data class ParameterField(
 data class ParameterGroup(
     val location: ParameterLocation,
     val fields: ImmutableList<ParameterField>,
+)
+
+/**
+ * 自定义请求特有的编辑内容（PRD 4.2）。
+ *
+ * @property scratch 临时请求：写完整地址，使用自己的 [variables]。
+ */
+data class CustomEditor(
+    val name: String,
+    val method: HttpMethod,
+    val url: String,
+    val scratch: Boolean,
+    val variables: ImmutableList<EnvironmentVariable>,
 )
 
 /** 原文与可视化两种编辑方式（PRD 4.3）。 */
@@ -326,12 +343,35 @@ interface RequestEditorActions :
     RequestHeaderActions,
     ParameterActions,
     BodyActions,
-    JsonBodyActions {
+    JsonBodyActions,
+    CustomRequestActions,
+    ExtractionActions {
     fun send()
 
     fun cancel()
 
     fun dismissProblems()
+}
+
+/** 编辑自定义请求的方法、地址与临时请求的变量（PRD 4.2）；编辑接口时不起作用。 */
+interface CustomRequestActions {
+    fun setMethod(method: HttpMethod)
+
+    fun setUrl(url: String)
+
+    fun setVariables(variables: List<EnvironmentVariable>)
+}
+
+/** 编辑提取规则（PRD 5）。 */
+interface ExtractionActions {
+    fun addRule(
+        jsonPath: String,
+        variable: String,
+    )
+
+    fun updateRule(rule: ExtractionRule)
+
+    fun removeRule(id: ExtractionRuleId)
 }
 
 /** 编辑参数与额外参数（PRD 4.1）。 */

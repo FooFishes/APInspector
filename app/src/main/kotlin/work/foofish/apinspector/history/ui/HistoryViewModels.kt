@@ -10,6 +10,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -24,21 +25,25 @@ import work.foofish.apinspector.navigation.HistoryEntryKey
 import work.foofish.apinspector.navigation.HistoryKey
 import work.foofish.apinspector.network.FileAccess
 import work.foofish.apinspector.network.RequestSender
-import work.foofish.apinspector.network.SendTarget
 import work.foofish.apinspector.openapi.OperationKey
+import work.foofish.apinspector.request.RequestRef
+import work.foofish.apinspector.request.isSameRequest
 import work.foofish.apinspector.response.BodyDisplay
 import work.foofish.apinspector.response.HistoryActions
 import work.foofish.apinspector.response.ResponseBodyLoader
 import work.foofish.apinspector.response.ResponseDetail
 import work.foofish.apinspector.response.ResponseDetailModel
+import work.foofish.apinspector.response.SetVariable
 import java.io.File
 
 /**
  * @property entries 从新到旧；加载中为 `null`。
- * @property operation 只列出该接口的记录；为 `null` 时列出全部。
+ * @property single 只列出一个接口或自定义请求的记录。
+ * @property operation 只列出该接口的记录时给出。
  */
 data class HistoryUiState(
     val entries: ImmutableList<HistorySummary>?,
+    val single: Boolean,
     val operation: OperationKey?,
 )
 
@@ -55,13 +60,16 @@ class HistoryViewModel
             fun create(key: HistoryKey): HistoryViewModel
         }
 
+        private val initial =
+            HistoryUiState(entries = null, single = key.ref != null, operation = (key.ref as? RequestRef.Operation)?.key)
+
         val uiState: StateFlow<HistoryUiState> =
             history
-                .summaries(key.specId, key.operation)
-                .map { HistoryUiState(it.toImmutableList(), key.operation) }
-                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), HistoryUiState(null, key.operation))
+                .summaries(key.specId, key.ref)
+                .map { initial.copy(entries = it.toImmutableList()) }
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), initial)
 
-        /** 清空该 API 文档的全部记录（PRD 7.1"手动清空"）。 */
+        /** 清空该 API 文档（或临时请求）的全部记录（PRD 7.1"手动清空"）。 */
         fun clear() {
             viewModelScope.launch { history.clear(key.specId) }
         }
@@ -106,7 +114,7 @@ class HistoryEntryViewModel
                 HistoryEntryUiState(
                     detail = detail,
                     missing = missing,
-                    sending = detail?.entry?.let { SendTarget(it.specId, it.operation) in inFlight } == true,
+                    sending = detail?.entry?.let { entry -> inFlight.keys.any { it.isSameRequest(entry.ref) } } == true,
                 )
             }.stateIn(
                 viewModelScope,
@@ -118,7 +126,22 @@ class HistoryEntryViewModel
 
         /** 取消该记录所属接口的在途请求（例如刚从这里重放的请求）。 */
         fun cancel() {
-            entry.value?.let { executor.cancel(SendTarget(it.specId, it.operation)) }
+            val ref = entry.value?.ref ?: return
+            executor.inFlight.value.keys
+                .firstOrNull { it.isSameRequest(ref) }
+                ?.let(executor::cancel)
+        }
+
+        /** "设为变量…"没有可写入的环境。 */
+        val variableFailed = MutableStateFlow(false)
+
+        fun setVariable(request: SetVariable) {
+            val entry = entry.value ?: return
+            viewModelScope.launch { variableFailed.value = !actions.setVariable(entry, request) }
+        }
+
+        fun onVariableFailureShown() {
+            variableFailed.value = false
         }
 
         fun toggle(path: String) = model.toggle(path)

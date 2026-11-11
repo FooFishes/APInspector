@@ -1,9 +1,11 @@
 package work.foofish.apinspector.openapi.request
 
 import work.foofish.apinspector.openapi.ApiKeyLocation
+import work.foofish.apinspector.openapi.HttpMethod
 import work.foofish.apinspector.openapi.OpenApiDocument
 import work.foofish.apinspector.openapi.Operation
 import work.foofish.apinspector.openapi.Resolvable
+import work.foofish.apinspector.openapi.SecurityRequirement
 import java.util.Base64
 
 /** 发送时使用的环境内容（PRD 5）。 */
@@ -69,13 +71,50 @@ public class RequestAssembler(
         if (!isAbsoluteHttpUrl(baseUrl)) problems += AssemblyProblem.IncompleteBaseUrl(baseUrl)
 
         val manual = manualParts(operation, input, resolve)
-        val auth = authParts(operation, environment.credentials, resolve)
+        val auth = authParts(operation.security, environment.credentials, resolve)
 
         val manualContentType = manual.headers.lastOrNull { it.name.equals(CONTENT_TYPE, ignoreCase = true) }?.value
         val body = input.body?.let { assembleBody(it, manualContentType, resolve, problems) }
 
         if (missing.isNotEmpty()) problems.add(0, AssemblyProblem.MissingVariables(missing.toList()))
-        return if (problems.isEmpty()) ready(operation, baseUrl, manual, auth, body) else Assembly.Blocked(problems)
+        if (problems.isNotEmpty()) return Assembly.Blocked(problems)
+        return ready(operation.key.method, baseUrl + manual.path, operation.acceptHeader(), manual, auth, body)
+    }
+
+    /**
+     * 组装自定义请求（PRD 4.2）：没有声明的参数，只有额外参数与 Body。
+     *
+     * @param url 完整地址，或相对 [environment] baseUrl 的路径；可以引用变量、自带查询串。
+     * @param security 沿用的鉴权要求；临时请求为空。
+     */
+    public fun assemble(
+        method: HttpMethod,
+        url: String,
+        input: RequestInput,
+        environment: RequestEnvironment,
+        security: List<SecurityRequirement>,
+    ): Assembly {
+        val missing = LinkedHashSet<String>()
+        val resolve = { text: String -> Variables.substitute(text, environment.variables, missing) }
+        val problems = mutableListOf<AssemblyProblem>()
+
+        val target = resolve(url.trim())
+        val address =
+            if (isAbsoluteHttpUrl(target)) {
+                target
+            } else {
+                val baseUrl = resolve(environment.baseUrl).trimEnd('/')
+                if (!isAbsoluteHttpUrl(baseUrl)) problems += AssemblyProblem.IncompleteBaseUrl(baseUrl)
+                baseUrl + PATH_SEPARATOR + target.trimStart('/')
+            }
+
+        val manual = ManualParts(path = "").apply { addExtras(input, resolve) }
+        val auth = authParts(security, environment.credentials, resolve)
+        val manualContentType = manual.headers.lastOrNull { it.name.equals(CONTENT_TYPE, ignoreCase = true) }?.value
+        val body = input.body?.let { assembleBody(it, manualContentType, resolve, problems) }
+
+        if (missing.isNotEmpty()) problems.add(0, AssemblyProblem.MissingVariables(missing.toList()))
+        return if (problems.isEmpty()) ready(method, address, MediaType.ANY, manual, auth, body) else Assembly.Blocked(problems)
     }
 
     private fun manualParts(
@@ -88,6 +127,15 @@ public class RequestAssembler(
             val value = input.parameter(parameter.location, parameter.name) ?: parameter.defaultInput(document)
             if (parameter.isSent(value)) manual.add(parameter.name, parameter.serialize(value.value.map(resolve)))
         }
+        manual.addExtras(input, resolve)
+        return manual
+    }
+
+    private fun ManualParts.addExtras(
+        input: RequestInput,
+        resolve: (String) -> String,
+    ) {
+        val manual = this
         input.extras.filter { it.enabled && it.name.isNotBlank() }.forEach { extra ->
             val name = resolve(extra.name)
             val value = resolve(extra.value)
@@ -96,11 +144,10 @@ public class RequestAssembler(
                 ExtraLocation.HEADER -> manual.headers += Field(name, value)
             }
         }
-        return manual
     }
 
     private fun authParts(
-        operation: Operation,
+        security: List<SecurityRequirement>,
         credentials: Map<String, Credential>,
         resolve: (String) -> String,
     ): AuthParts {
@@ -109,29 +156,35 @@ public class RequestAssembler(
                 .mapNotNull { (name, scheme) ->
                     (scheme as? Resolvable.Resolved)?.value?.let { name to it }
                 }.toMap()
-        return AuthParts().apply { selectCredentials(operation.security, schemes, credentials).forEach { add(it, resolve) } }
+        return AuthParts().apply { selectCredentials(security, schemes, credentials).forEach { add(it, resolve) } }
     }
 
-    /** 合并各部分：手动填写的 Query 与 Cookie 覆盖鉴权的同名项。 */
+    /**
+     * 合并各部分：手动填写的 Query 与 Cookie 覆盖鉴权的同名项。
+     *
+     * @param address 不含参数给出的查询串的地址；自定义请求的地址可能已自带查询串。
+     */
     private fun ready(
-        operation: Operation,
-        baseUrl: String,
+        method: HttpMethod,
+        address: String,
+        accept: String,
         manual: ManualParts,
         auth: AuthParts,
         body: HttpBody?,
     ): Assembly.Ready {
         val headers =
             mergeHeaders(
-                automatic = listOf(Field(ACCEPT, operation.acceptHeader()), Field(USER_AGENT, userAgent)),
+                automatic = listOf(Field(ACCEPT, accept), Field(USER_AGENT, userAgent)),
                 auth = auth.headers,
                 manual = manual.headers.filterNot { body != null && it.name.equals(CONTENT_TYPE, ignoreCase = true) },
             )
         val manualQueryNames = manual.query.map { it.substringBefore('=') }.toSet()
         val query = listOfNotNull(manual.queryString) + manual.query + auth.query.filterNot { it.substringBefore('=') in manualQueryNames }
-        val url = baseUrl + manual.path + if (query.isEmpty()) "" else "?" + query.joinToString("&")
+        val separator = if (QUERY_START in address) QUERY_SEPARATOR else QUERY_START
+        val url = address + if (query.isEmpty()) "" else separator + query.joinToString(QUERY_SEPARATOR)
         val manualCookieNames = manual.cookies.map { it.name }.toSet()
         val cookies = manual.cookies + auth.cookies.filterNot { it.name in manualCookieNames }
-        return Assembly.Ready(HttpRequest(operation.key.method, url, headers, body), cookies)
+        return Assembly.Ready(HttpRequest(method, url, headers, body), cookies)
     }
 
     private fun assembleBody(
@@ -249,6 +302,9 @@ public class RequestAssembler(
         const val AUTHORIZATION = "Authorization"
         const val CONTENT_TYPE = "Content-Type"
         const val JSON = "application/json"
+        const val PATH_SEPARATOR = "/"
+        const val QUERY_START = "?"
+        const val QUERY_SEPARATOR = "&"
     }
 }
 

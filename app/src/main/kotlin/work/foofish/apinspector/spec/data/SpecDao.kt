@@ -92,8 +92,15 @@ interface SpecDao {
         path: String,
     )
 
+    @Query("DELETE FROM extraction_rule WHERE spec_id = :specId AND method = :method AND path = :path")
+    suspend fun deleteRules(
+        specId: String,
+        method: String,
+        path: String,
+    )
+
     /**
-     * 刷新：更新元数据，删除已消失接口的收藏、当前参数与预设，并写入与新文档对齐后的当前参数与预设（PRD 2、4.1）。
+     * 刷新：更新元数据，删除已消失接口的收藏、当前参数、预设与提取规则，并写入与新文档对齐后的当前参数与预设（PRD 2、4.1）。
      */
     @Transaction
     suspend fun applyRefresh(
@@ -107,6 +114,7 @@ interface SpecDao {
             deleteFavorite(it.specId, it.method, it.path)
             deleteWorking(it.specId, it.method, it.path)
             deletePresets(it.specId, it.method, it.path)
+            deleteRules(it.specId, it.method, it.path)
         }
         upsertPresets(presets)
         upsertWorking(working)

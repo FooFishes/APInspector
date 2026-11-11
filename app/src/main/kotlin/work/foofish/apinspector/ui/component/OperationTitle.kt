@@ -9,6 +9,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import work.foofish.apinspector.openapi.HttpMethod
 import work.foofish.apinspector.openapi.OperationKey
 import work.foofish.apinspector.ui.theme.codeMedium
 
@@ -18,9 +19,19 @@ fun OperationTitle(
     operation: OperationKey,
     modifier: Modifier = Modifier,
 ) {
+    OperationTitle(operation.method, operation.path, modifier)
+}
+
+/** 顶栏标题：方法徽章与路径；自定义请求的 [path] 是它的名称或地址。 */
+@Composable
+fun OperationTitle(
+    method: HttpMethod,
+    path: String,
+    modifier: Modifier = Modifier,
+) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(TitleSpacing), verticalAlignment = Alignment.CenterVertically) {
-        MethodBadge(operation.method)
-        Text(operation.path, style = MaterialTheme.typography.codeMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        MethodBadge(method)
+        Text(path, style = MaterialTheme.typography.codeMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

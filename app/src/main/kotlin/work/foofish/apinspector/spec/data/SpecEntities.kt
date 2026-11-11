@@ -5,10 +5,12 @@ import androidx.room3.Entity
 import androidx.room3.ForeignKey
 import androidx.room3.Index
 import androidx.room3.PrimaryKey
+import kotlinx.serialization.Serializable
 
 /**
  * API 文档的元数据。文档原文可能有数 MB，超出 CursorWindow 的单行上限，因此单独存为文件（见 [SpecContentStore]）。
  */
+@Serializable
 @Entity(tableName = "spec")
 data class SpecEntity(
     @PrimaryKey val id: String,
@@ -32,6 +34,7 @@ enum class SpecOriginType {
 }
 
 /** 收藏的接口；API 文档删除时一并删除。 */
+@Serializable
 @Entity(
     tableName = "favorite_operation",
     primaryKeys = ["spec_id", "method", "path"],

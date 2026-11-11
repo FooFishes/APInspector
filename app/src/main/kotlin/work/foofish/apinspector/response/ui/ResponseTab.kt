@@ -67,7 +67,13 @@ fun ResponseTab(
     }
     val actions =
         remember(viewModel) {
-            ResponseDetailActions(viewModel::toggle, viewModel::setQuery, viewModel::setDisplay, viewModel::saveBody)
+            ResponseDetailActions(
+                viewModel::toggle,
+                viewModel::setQuery,
+                viewModel::setDisplay,
+                viewModel::saveBody,
+                viewModel::setVariable,
+            )
         }
     Column(modifier.fillMaxSize()) {
         state.sendingSince?.let { SendingBanner(onCancel = viewModel::cancel) }
@@ -101,6 +107,8 @@ fun ResponseTab(
         }
     }
     saveFailure?.let { SaveFailureDialog(it, viewModel::dismissSaveFailure) }
+    val variableFailed by viewModel.variableFailed.collectAsStateWithLifecycle()
+    if (variableFailed) VariableFailureDialog(viewModel::onVariableFailureShown)
 }
 
 /** 请求进行中（PRD 6）：波浪进度条与"取消"。 */

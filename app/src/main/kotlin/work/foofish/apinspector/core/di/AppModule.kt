@@ -14,14 +14,21 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import okhttp3.OkHttpClient
+import work.foofish.apinspector.backup.data.BackupDao
 import work.foofish.apinspector.core.coroutines.ApplicationScope
 import work.foofish.apinspector.core.coroutines.DefaultDispatcher
 import work.foofish.apinspector.core.coroutines.IoDispatcher
 import work.foofish.apinspector.core.db.AppDatabase
+import work.foofish.apinspector.custom.CustomRequestRepository
+import work.foofish.apinspector.custom.data.CustomRequestDao
+import work.foofish.apinspector.custom.data.DefaultCustomRequestRepository
 import work.foofish.apinspector.environment.CookieStore
 import work.foofish.apinspector.environment.EnvironmentRepository
 import work.foofish.apinspector.environment.data.DefaultEnvironmentRepository
 import work.foofish.apinspector.environment.data.EnvironmentDao
+import work.foofish.apinspector.extraction.ExtractionRuleRepository
+import work.foofish.apinspector.extraction.data.DefaultExtractionRuleRepository
+import work.foofish.apinspector.extraction.data.ExtractionRuleDao
 import work.foofish.apinspector.history.HistoryRepository
 import work.foofish.apinspector.history.ResponseCache
 import work.foofish.apinspector.history.data.DefaultHistoryRepository
@@ -49,29 +56,6 @@ import javax.inject.Singleton
 object AppModule {
     /** 全局默认超时（PRD 6）。 */
     private val DEFAULT_TIMEOUT: Duration = Duration.ofSeconds(30)
-
-    @Provides
-    @Singleton
-    fun database(
-        @ApplicationContext context: Context,
-    ): AppDatabase =
-        Room
-            .databaseBuilder(context, AppDatabase::class.java, AppDatabase.NAME)
-            // 使用系统自带的 SQLite，不额外打包原生库。
-            .setDriver(AndroidSQLiteDriver())
-            .build()
-
-    @Provides
-    fun specDao(database: AppDatabase): SpecDao = database.specDao()
-
-    @Provides
-    fun environmentDao(database: AppDatabase): EnvironmentDao = database.environmentDao()
-
-    @Provides
-    fun requestInputDao(database: AppDatabase): RequestInputDao = database.requestInputDao()
-
-    @Provides
-    fun historyDao(database: AppDatabase): HistoryDao = database.historyDao()
 
     @Provides
     @Singleton

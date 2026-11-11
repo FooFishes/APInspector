@@ -44,6 +44,19 @@ fun MutableList<NavKey>.openEnvironment(key: EnvironmentKey) {
     add(key)
 }
 
+/** 打开临时请求列表，丢弃之前打开的 API 文档及其页面。 */
+fun MutableList<NavKey>.openScratch() {
+    retainAll { it is HomeKey }
+    add(ScratchKey)
+}
+
+/** 从接口列表或临时请求列表打开自定义请求：回到列表之上，替换已打开的详情。 */
+fun MutableList<NavKey>.openCustomRequest(key: CustomRequestKey) {
+    val list = indexOfLast { it is SpecKey || it is ScratchKey }
+    if (list >= 0) subList(list + 1, size).clear()
+    add(key)
+}
+
 fun MutableList<NavKey>.openSettings() {
     if (lastOrNull() != SettingsKey) add(SettingsKey)
 }
@@ -53,6 +66,9 @@ val List<NavKey>.currentSpec: SpecKey? get() = filterIsInstance<SpecKey>().lastO
 
 /** 当前在详情中打开的接口。 */
 val List<NavKey>.currentOperation: OperationPageKey? get() = lastOrNull() as? OperationPageKey
+
+/** 当前在详情中打开的自定义请求。 */
+val List<NavKey>.currentCustomRequest: CustomRequestKey? get() = lastOrNull() as? CustomRequestKey
 
 private inline fun <reified T : NavKey> MutableList<NavKey>.replaceTrailing() {
     if (lastOrNull() is T) removeAt(lastIndex)

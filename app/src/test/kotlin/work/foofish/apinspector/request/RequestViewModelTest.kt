@@ -13,7 +13,6 @@ import org.junit.jupiter.api.extension.RegisterExtension
 import work.foofish.apinspector.environment.EnvironmentId
 import work.foofish.apinspector.history.RequestSource
 import work.foofish.apinspector.navigation.OperationPageKey
-import work.foofish.apinspector.network.SendTarget
 import work.foofish.apinspector.openapi.HttpMethod
 import work.foofish.apinspector.openapi.OperationKey
 import work.foofish.apinspector.openapi.ParameterLocation
@@ -23,10 +22,13 @@ import work.foofish.apinspector.openapi.request.HttpBody
 import work.foofish.apinspector.openapi.request.JsonNode
 import work.foofish.apinspector.openapi.request.ParameterValue
 import work.foofish.apinspector.openapi.request.RequestInput
+import work.foofish.apinspector.request.RequestRef
 import work.foofish.apinspector.request.body.JsonPath
 import work.foofish.apinspector.request.body.JsonStep
 import work.foofish.apinspector.spec.SpecId
+import work.foofish.apinspector.testing.FakeCustomRequestRepository
 import work.foofish.apinspector.testing.FakeEnvironmentRepository
+import work.foofish.apinspector.testing.FakeExtractionRuleRepository
 import work.foofish.apinspector.testing.FakeFileAccess
 import work.foofish.apinspector.testing.FakeRequestInputRepository
 import work.foofish.apinspector.testing.FakeRequestSender
@@ -78,10 +80,12 @@ class RequestViewModelTest {
     // 在 setMain 之后创建：viewModelScope 与保存用的作用域都使用测试调度器。
     private val viewModel by lazy {
         RequestViewModel(
-            key = OperationPageKey(specId, operation),
+            target = RequestTarget.Operation(specId, operation),
             specs = specs,
             environments = environments,
             inputs = inputs,
+            customs = FakeCustomRequestRepository(),
+            rules = FakeExtractionRuleRepository(),
             executor = sender,
             files = FakeFileAccess(),
             userAgent = "APInspector/test",
@@ -151,7 +155,7 @@ class RequestViewModelTest {
 
                 assertTrue(expectMostRecentItem().loaded().sent)
                 val job = sender.sent.single()
-                assertEquals(SendTarget(specId, operation), job.target)
+                assertEquals(RequestRef.Operation(specId, operation), job.target)
                 assertEquals("https://api.example.com/v1/pets/7", job.request.url)
                 assertEquals(HttpBody.Text("application/json", "{\n  \"name\": \"Rex\",\n  \"age\": 0\n}"), job.request.body)
                 assertEquals(RequestSource.OPERATION, job.source)

@@ -19,16 +19,19 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import work.foofish.apinspector.custom.CustomRequestRepository
 import work.foofish.apinspector.environment.EnvironmentRepository
+import work.foofish.apinspector.extraction.ExtractionRuleRepository
+import work.foofish.apinspector.extraction.VariableWriter
 import work.foofish.apinspector.history.HistoryEntry
 import work.foofish.apinspector.history.Outcome
 import work.foofish.apinspector.history.RequestSource
 import work.foofish.apinspector.network.FileAccess
 import work.foofish.apinspector.network.RequestSender
 import work.foofish.apinspector.network.SendJob
-import work.foofish.apinspector.network.SendTarget
 import work.foofish.apinspector.openapi.request.Curl
 import work.foofish.apinspector.request.RequestInputRepository
+import work.foofish.apinspector.request.RequestRef
 import work.foofish.apinspector.request.WorkingParams
 import java.io.File
 import java.io.IOException
@@ -159,20 +162,45 @@ class ResponseDetailModel(
     }
 }
 
-/** 重放与"恢复到当前参数"（PRD 7.1）。 */
+/** 把响应中 [jsonPath] 处的 [value] 写入变量 [name]；[addRule] 时同时建提取规则。 */
+data class SetVariable(
+    val name: String,
+    val value: String,
+    val jsonPath: String,
+    val addRule: Boolean,
+)
+
+/** 重放、"恢复到当前参数"（PRD 7.1）与"设为变量…"（PRD 5）。 */
 class HistoryActions
     @Inject
     constructor(
         private val environments: EnvironmentRepository,
         private val inputs: RequestInputRepository,
+        private val customs: CustomRequestRepository,
         private val executor: RequestSender,
+        private val writer: VariableWriter,
+        private val rules: ExtractionRuleRepository,
     ) {
+        /**
+         * "设为变量…"（PRD 5）：写入记录所属环境（临时请求则是它自己）的变量，并按需建一条提取规则。
+         *
+         * @return 是否已写入；环境或请求已被删除时为 `false`，此时也不建规则。
+         */
+        suspend fun setVariable(
+            entry: HistoryEntry,
+            request: SetVariable,
+        ): Boolean {
+            if (!writer.write(entry.ref, entry.environmentId, mapOf(request.name to request.value))) return false
+            if (request.addRule) rules.add(entry.ref, request.jsonPath, request.name)
+            return true
+        }
+
         /** 原样重发实际请求：不重新替换变量、不注入鉴权、不追加 Cookie；使用所属环境当前的网络设置。 */
         suspend fun replay(entry: HistoryEntry): Boolean {
             val environment = entry.environmentId?.let { environments.find(it) }
             return executor.send(
                 SendJob(
-                    target = SendTarget(entry.specId, entry.operation),
+                    target = entry.ref,
                     environment = environment,
                     request = entry.request,
                     cookies = emptyList(),
@@ -184,9 +212,12 @@ class HistoryActions
             )
         }
 
-        /** 把发送时的当前参数写回该接口；不再关联任何预设。 */
+        /** 把发送时的当前参数写回该接口（不再关联任何预设）或自定义请求。 */
         suspend fun restore(entry: HistoryEntry) {
             val input = entry.input ?: return
-            inputs.saveWorking(entry.specId, entry.operation, WorkingParams(input, presetId = null))
+            when (val ref = entry.ref) {
+                is RequestRef.Operation -> inputs.saveWorking(ref.specId, ref.key, WorkingParams(input, presetId = null))
+                is RequestRef.Custom -> customs.find(ref.id)?.let { customs.update(it.copy(input = input)) }
+            }
         }
     }

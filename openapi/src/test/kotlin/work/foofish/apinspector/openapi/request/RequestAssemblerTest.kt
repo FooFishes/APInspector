@@ -204,4 +204,65 @@ class RequestAssemblerTest {
         assertEquals("https://api.example.com/v1/users/", request.url)
         assertEquals(ParameterLocation.PATH, get.editableParameters.first().location)
     }
+
+    @Test
+    fun `custom request with an absolute url ignores the base url`() {
+        val input =
+            RequestInput(
+                parameters = emptyList(),
+                extras =
+                    listOf(
+                        ExtraParameter(ExtraLocation.QUERY, "page", "2", enabled = true),
+                        ExtraParameter(ExtraLocation.HEADER, "X-Trace", "{{host}}", enabled = true),
+                    ),
+                body = BodyInput.Json("application/json", "{}"),
+            )
+        val environment = RequestEnvironment("/relative", mapOf("host" to "api.example.com"), emptyMap())
+
+        val request = ready(assembler.assemble(HttpMethod.POST, " https://{{host}}/search?q=1 ", input, environment, emptyList())).request
+
+        assertEquals(HttpMethod.POST, request.method)
+        assertEquals("https://api.example.com/search?q=1&page=2", request.url)
+        assertEquals(
+            listOf(Field("Accept", "*/*"), Field("User-Agent", "APInspector/test"), Field("X-Trace", "api.example.com")),
+            request.headers,
+        )
+        assertEquals(HttpBody.Text("application/json", "{}"), request.body)
+    }
+
+    @Test
+    fun `custom request with a relative url uses the base url and the given security`() {
+        val input = RequestInput(parameters = emptyList(), extras = emptyList(), body = null)
+        val security = get.security
+
+        val request =
+            ready(
+                assembler.assemble(
+                    HttpMethod.GET,
+                    "users/me",
+                    input,
+                    environment(credentials = mapOf("token" to Credential.Bearer("abc"))),
+                    security,
+                ),
+            ).request
+
+        assertEquals("https://api.example.com/v1/users/me", request.url)
+        assertEquals("Bearer abc", request.headers.first { it.name == "Authorization" }.value)
+    }
+
+    @Test
+    fun `custom request with a relative url needs a complete base url`() {
+        val input = RequestInput(parameters = emptyList(), extras = emptyList(), body = null)
+
+        val blocked =
+            assertInstanceOf(
+                Assembly.Blocked::class.java,
+                assembler.assemble(HttpMethod.GET, "/users/{{id}}", input, RequestEnvironment("", emptyMap(), emptyMap()), emptyList()),
+            )
+
+        assertEquals(
+            listOf(AssemblyProblem.MissingVariables(listOf("id")), AssemblyProblem.IncompleteBaseUrl("")),
+            blocked.problems,
+        )
+    }
 }

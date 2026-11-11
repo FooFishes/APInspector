@@ -30,6 +30,7 @@ import work.foofish.apinspector.core.coroutines.ApplicationScope
 import work.foofish.apinspector.core.coroutines.IoDispatcher
 import work.foofish.apinspector.environment.CookieStore
 import work.foofish.apinspector.environment.Environment
+import work.foofish.apinspector.extraction.ExtractionRunner
 import work.foofish.apinspector.history.HistoryEntryId
 import work.foofish.apinspector.history.HistoryRepository
 import work.foofish.apinspector.history.NetworkError
@@ -41,15 +42,14 @@ import work.foofish.apinspector.history.RequestSource
 import work.foofish.apinspector.history.StoredBody
 import work.foofish.apinspector.history.data.ResponseBodyStore
 import work.foofish.apinspector.openapi.HttpMethod
-import work.foofish.apinspector.openapi.OperationKey
 import work.foofish.apinspector.openapi.request.Field
 import work.foofish.apinspector.openapi.request.HttpBody
 import work.foofish.apinspector.openapi.request.HttpPart
 import work.foofish.apinspector.openapi.request.HttpRequest
 import work.foofish.apinspector.openapi.request.RequestInput
 import work.foofish.apinspector.openapi.request.isTransportHeader
+import work.foofish.apinspector.request.RequestRef
 import work.foofish.apinspector.settings.SettingsRepository
-import work.foofish.apinspector.spec.SpecId
 import java.io.File
 import java.io.IOException
 import java.io.InterruptedIOException
@@ -64,20 +64,15 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import javax.net.ssl.SSLException
 
-/** 一个接口的发送槽位：同一接口同时只有一个请求在途（PRD 6）。 */
-data class SendTarget(
-    val specId: SpecId,
-    val operation: OperationKey,
-)
-
 /**
  * 待发送的请求。
  *
+ * @property target 发送槽位：同一请求同时只有一个在途（PRD 6）。
  * @property cookies 参数与鉴权给出的 Cookie，与环境的 Cookie 罐合并。
  * @property loadCookieJar 是否携带罐中的 Cookie；重放时为 `false`，原样发送记录中的 `Cookie` 头（PRD 7.1）。
  */
 data class SendJob(
-    val target: SendTarget,
+    val target: RequestRef,
     val environment: Environment?,
     val request: HttpRequest,
     val cookies: List<Field>,
@@ -90,12 +85,12 @@ data class SendJob(
 /** 发送请求并跟踪在途请求（PRD 6）。 */
 interface RequestSender {
     /** 在途请求及其开始时间。 */
-    val inFlight: StateFlow<Map<SendTarget, Instant>>
+    val inFlight: StateFlow<Map<RequestRef, Instant>>
 
     /** 开始发送；同一接口已有请求在途时不发送并返回 `false`。 */
     fun send(job: SendJob): Boolean
 
-    fun cancel(target: SendTarget)
+    fun cancel(target: RequestRef)
 }
 
 /**
@@ -113,12 +108,13 @@ class RequestExecutor
         private val cookies: CookieStore,
         private val history: HistoryRepository,
         private val bodies: ResponseBodyStore,
+        private val extraction: ExtractionRunner,
         private val clock: Clock,
     ) : RequestSender {
-        private val jobs = HashMap<SendTarget, Job>()
-        private val running = MutableStateFlow<Map<SendTarget, Instant>>(emptyMap())
+        private val jobs = HashMap<RequestRef, Job>()
+        private val running = MutableStateFlow<Map<RequestRef, Instant>>(emptyMap())
 
-        override val inFlight: StateFlow<Map<SendTarget, Instant>> = running.asStateFlow()
+        override val inFlight: StateFlow<Map<RequestRef, Instant>> = running.asStateFlow()
 
         override fun send(job: SendJob): Boolean {
             synchronized(jobs) {
@@ -140,7 +136,7 @@ class RequestExecutor
             return true
         }
 
-        override fun cancel(target: SendTarget) {
+        override fun cancel(target: RequestRef) {
             synchronized(jobs) { jobs[target] }?.cancel()
         }
 
@@ -164,7 +160,10 @@ class RequestExecutor
                     // 非法的 Header 名、方法与 Body 的组合等：OkHttp 在构造请求时拒绝。
                     Outcome.Failed(NetworkError(NetworkErrorKind.OTHER, exception.message))
                 }
-            return history.record(job.toEntry(sent, outcome, started, startNanos))
+            val id = history.record(job.toEntry(sent, outcome, started, startNanos))
+            // 记录先落盘，再执行提取规则（PRD 5）；重放的请求同样提取，以便用重放刷新变量。
+            if (outcome is Outcome.Received) extraction.run(job.target, job.environment?.id, outcome.response)
+            return id
         }
 
         /** 返回实际发出的请求（含传输层补充的 Cookie 等 Header）与结果。 */
@@ -316,8 +315,7 @@ class RequestExecutor
             started: Instant,
             startNanos: Long,
         ) = NewHistoryEntry(
-            specId = target.specId,
-            operation = target.operation,
+            ref = target,
             environmentId = environment?.id,
             environmentName = environment?.name,
             source = source,

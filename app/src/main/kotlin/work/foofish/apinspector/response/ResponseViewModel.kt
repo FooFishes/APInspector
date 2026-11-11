@@ -19,10 +19,11 @@ import kotlinx.coroutines.launch
 import work.foofish.apinspector.core.coroutines.DefaultDispatcher
 import work.foofish.apinspector.history.HistoryEntry
 import work.foofish.apinspector.history.HistoryRepository
-import work.foofish.apinspector.navigation.OperationPageKey
 import work.foofish.apinspector.network.FileAccess
 import work.foofish.apinspector.network.RequestSender
-import work.foofish.apinspector.network.SendTarget
+import work.foofish.apinspector.request.RequestRef
+import work.foofish.apinspector.request.RequestTarget
+import work.foofish.apinspector.request.isSameRequest
 import java.io.File
 import java.time.Instant
 
@@ -52,7 +53,7 @@ sealed interface ResponseContent {
 class ResponseViewModel
     @AssistedInject
     constructor(
-        @Assisted key: OperationPageKey,
+        @Assisted target: RequestTarget,
         history: HistoryRepository,
         loader: ResponseBodyLoader,
         private val executor: RequestSender,
@@ -62,23 +63,34 @@ class ResponseViewModel
     ) : ViewModel() {
         @AssistedFactory
         interface Factory {
-            fun create(key: OperationPageKey): ResponseViewModel
+            fun create(target: RequestTarget): ResponseViewModel
         }
 
-        private val target = SendTarget(key.specId, key.operation)
+        /** 自定义请求的记录只以它的标识查找，与它当前归属哪份 API 文档无关。 */
+        private val ref: RequestRef =
+            when (target) {
+                is RequestTarget.Operation -> RequestRef.Operation(target.specId, target.key)
+                is RequestTarget.Custom -> RequestRef.Custom(target.id, specId = null)
+            }
         private val latest: StateFlow<Latest> =
             history
-                .latest(key.specId, key.operation)
+                .latest(ref)
                 .map<HistoryEntry?, Latest>(Latest::Known)
                 .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), Latest.Unknown)
         private val model = ResponseDetailModel(viewModelScope, latest.map { (it as? Latest.Known)?.entry }, loader, files, computation)
         private val restored = MutableStateFlow(false)
 
+        /** "设为变量…"没有可写入的环境。 */
+        val variableFailed = MutableStateFlow(false)
+
         val uiState: StateFlow<ResponseUiState> =
             combine(
                 latest,
                 model.detail,
-                executor.inFlight.map { it[target] }.distinctUntilChanged(),
+                executor.inFlight
+                    .map { flights ->
+                        flights.entries.firstOrNull { it.key.isSameRequest(ref) }?.value
+                    }.distinctUntilChanged(),
                 restored,
             ) { latest, detail, since, restored ->
                 val content =
@@ -112,7 +124,9 @@ class ResponseViewModel
         fun dismissSaveFailure() = model.dismissSaveFailure()
 
         fun cancel() {
-            executor.cancel(target)
+            executor.inFlight.value.keys
+                .firstOrNull { it.isSameRequest(ref) }
+                ?.let(executor::cancel)
         }
 
         fun replay() {
@@ -126,6 +140,16 @@ class ResponseViewModel
                 actions.restore(entry)
                 restored.value = true
             }
+        }
+
+        /** 写入失败（环境已被删除）时 [variableFailed] 置位。 */
+        fun setVariable(request: SetVariable) {
+            val entry = (latest.value as? Latest.Known)?.entry ?: return
+            viewModelScope.launch { variableFailed.value = !actions.setVariable(entry, request) }
+        }
+
+        fun onVariableFailureShown() {
+            variableFailed.value = false
         }
 
         fun onRestoredShown() {
