@@ -1,10 +1,10 @@
 # APInspector
 
-自用的 Android OpenAPI 查看与请求工具。需求见 [PRD.md](./PRD.md)，术语见 [GLOSSARY.md](./GLOSSARY.md)（代码命名、UI 文案都必须使用其中的规范术语），关键取舍见 [docs/adr/](./docs/adr/)。
+Android 上的 OpenAPI 查看与请求工具。需求见 [PRD.md](./docs/PRD.md)，术语见 [GLOSSARY.md](./GLOSSARY.md)（代码命名、UI 文案都必须使用其中的规范术语），关键取舍见 [docs/adr/](./docs/adr/)。
 
 ## 工程取向
 
-这是自用项目，**不为兼容性妥协**（minSdk 34）。以"有洁癖、有追求"的标准写代码：
+项目只支持 Android 14 及以上（minSdk 34），**不为旧版本兼容性妥协**。以高标准写代码：
 
 - 一律采用当下最新的稳定版工具链与 Jetpack 推荐写法；有更现代的官方方案时，不用旧方案、不写"能跑就行"的代码。
 - 引入依赖前核对其**当前最新稳定版本**，不凭记忆写版本号；需要 alpha / beta 才有的能力（如部分 M3 Expressive API）可以用，但要显式 opt-in 并注明原因。

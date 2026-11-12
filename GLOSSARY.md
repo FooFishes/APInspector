@@ -1,6 +1,6 @@
 # APInspector
 
-一个自用的 Android 工具：导入 OpenAPI 文档，浏览其中的接口，快速发起请求并查看请求详情。
+一个 Android 工具：导入 OpenAPI 文档，浏览其中的接口，快速发起请求并查看请求详情。
 
 ## Language
 

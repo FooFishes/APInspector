@@ -1,19 +1,19 @@
 # APInspector — 产品需求文档（v1）
 
-> 术语以 [GLOSSARY.md](./GLOSSARY.md) 为准；关键取舍见 [docs/adr/](./docs/adr/)。
+> 术语以 [GLOSSARY.md](../GLOSSARY.md) 为准；关键取舍见 [docs/adr/](./adr/)。
 
 ## 1. 定位与基础
 
 | 项 | 决定 |
 |---|---|
-| 定位 | 自用 Android 调试工具：导入 OpenAPI 文档、浏览接口、快速请求、查看请求详情 |
-| 发布 | 不上架，无合规要求；仅中文界面（字符串全部抽取到资源文件） |
+| 定位 | Android 上的 OpenAPI 调试工具：导入 OpenAPI 文档、浏览接口、快速请求、查看请求详情 |
+| 发布 | 以 GPL-3.0 开源，通过 GitHub 分发，不上架应用商店；仅中文界面（字符串全部抽取到资源文件） |
 | 存储 | 仅本地，无账号、无云同步 |
 | 技术栈 | Kotlin + Jetpack Compose + **Material 3 Expressive**；网络 OkHttp；存储 Room；YAML 解析 kaml / snakeyaml-engine |
 | 显示名 / 包名 | APInspector / `work.foofish.apinspector` |
 | 最低版本 | Android 14（API 34） |
 | 设备 | 手机 + 平板 / 折叠屏，按窗口尺寸分级自适应（见 1.2） |
-| 工程取向 | 自用、不为兼容性妥协；全面采用当下最新的 Android 写法与最佳实践（见 [CLAUDE.md](./CLAUDE.md)） |
+| 工程取向 | 只支持 Android 14 及以上，不为旧版本兼容性妥协；全面采用当下最新的 Android 写法与最佳实践（见 [CLAUDE.md](../CLAUDE.md)） |
 
 ### 1.1 设计系统：完全使用 Material 3 Expressive
 

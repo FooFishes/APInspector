@@ -1,0 +1,52 @@
+name: 问题反馈
+description: 报告一个 Bug 或不符合预期的行为
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。提交前请去掉文档片段和截图中的真实地址与凭证。
+        安全漏洞请不要在这里提交，报告方式见 SECURITY.md。
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 发生了什么，你原本期望发生什么。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 导入……
+        2. 打开接口……
+        3. 点击……
+    validations:
+      required: true
+  - type: textarea
+    id: spec
+    attributes:
+      label: 相关的 OpenAPI 片段
+      description: 如果问题与某份文档有关，请贴出能复现问题的最小片段。
+      render: yaml
+  - type: input
+    id: version
+    attributes:
+      label: 应用版本
+      description: 版本号，或构建所用的提交。
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: 设备与系统版本
+      placeholder: Pixel 9 Pro，Android 16
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充信息
+      description: 截图、录屏或日志。
