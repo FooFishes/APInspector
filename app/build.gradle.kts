@@ -40,6 +40,8 @@ android {
 
     lint {
         warningsAsErrors = true
+        // "有新版本可用"取决于上游何时发版，与被检查的改动无关；只提示，不让构建失败。
+        informational += setOf("AndroidGradlePluginVersion", "GradleDependency", "NewerVersionAvailable")
     }
 
     testOptions {

@@ -22,7 +22,7 @@ Android 上的 OpenAPI 查看与请求工具。需求见 [PRD.md](./docs/PRD.md)
 - **序列化**：kotlinx.serialization。
 - **存储**：Room（KSP）；轻量设置用 DataStore。
 - **网络**：OkHttp（利用 EventListener 获取耗时分解）。
-- **质量**：Spotless + ktlint（`ktlint_official`）+ Compose 规则；Detekt 2；Android Lint 与 Kotlin 编译器均把警告视为错误。
+- **质量**：Spotless + ktlint（`ktlint_official`）+ Compose 规则；Detekt 2；Android Lint 与 Kotlin 编译器均把警告视为错误（"有新版本可用"类的 Lint 检查只提示）。
 - **测试**：只写单元测试，覆盖领域逻辑（OpenAPI 解析、`$ref` 解析、变量替换、cURL 解析 / 导出、提取规则等）与 ViewModel（JUnit 6 Jupiter + Turbine）。不写 UI 测试、截图测试和 e2e 测试。
 
 ## 常用命令

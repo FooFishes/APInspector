@@ -28,3 +28,10 @@ jobs:
 
       # Spotless、Detekt、Android Lint 与全部单元测试。
       - run: ./gradlew check
+
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reports
+          path: "**/build/reports/"
+          if-no-files-found: ignore

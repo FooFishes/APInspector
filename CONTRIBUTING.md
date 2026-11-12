@@ -24,7 +24,7 @@
 
 1. Fork 仓库，从 `main` 创建分支。
 2. 完成改动，并为领域逻辑补充单元测试。
-3. 确认 `./gradlew check` 通过。Kotlin 编译器与 Android Lint 的警告都按错误处理。
+3. 确认 `./gradlew check` 通过。Kotlin 编译器与 Android Lint 的警告都按错误处理，"有新版本可用"类的提示除外。
 4. 发起 Pull Request，说明改动的目的，涉及界面时附上截图。
 
 提交信息沿用现有历史的格式，即类型前缀加一句中文描述：
